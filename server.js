@@ -296,8 +296,10 @@ app.get('/api/scanners', (req, res) => {
   res.json(SCANNERS.map(s => ({ id: s.id, name: s.name, icon: s.icon })));
 });
 
-app.listen(PORT, () => {
-  console.log(`
+// Only listen locally (Vercel uses module.exports)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║                                                          ║
 ║   ⚡ Synthrex — AI Security Scanner v2.0                 ║
@@ -309,5 +311,9 @@ app.listen(PORT, () => {
 ║   Built by Gaurav Batule                                 ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+}
+
+// Export for Vercel serverless
+module.exports = app;
