@@ -2,7 +2,7 @@
 const API='';
 let scanId=null,poll=null,allOpen=false;
 
-function getBypass(){return window.location.search.includes('?=1')||new URLSearchParams(window.location.search).get('')==='1';}
+
 
 function normalizeTarget(t){
   t=t.trim();if(!t)return '';
@@ -24,14 +24,9 @@ async function startScan(overrideCode){
     if(!overrideCode){
       showLoader();
       const body={target:raw};
-      if(getBypass())body.bypass='1';
       const pc=await fetch(`${API}/api/precheck`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const pcd=await pc.json();
-      if(!pcd.allowed && pcd.reason==='blocked'){
-        hideLoader();
-        alert('This domain is protected and cannot be scanned.');
-        btn.disabled=false;btn.innerHTML='🔍 Scan';return;
-      }
+
       if(!pcd.allowed && pcd.reason==='invalid_domain'){
         hideLoader();
         alert(pcd.error || 'This domain does not exist or is unreachable.');
@@ -48,7 +43,6 @@ async function startScan(overrideCode){
     }
     // Proceed with scan
     const body={target:raw};
-    if(getBypass())body.bypass='1';
     if(overrideCode)body.accessCode=overrideCode;
     const r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();

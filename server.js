@@ -79,15 +79,7 @@ function normalizeUrl(input) {
   return url;
 }
 
-// Blocked domains (require bypass)
-const BLOCKED_DOMAINS = ['satkarya.in', 'www.satkarya.in'];
 
-function isDomainBlocked(targetUrl) {
-  try {
-    const u = new URL(targetUrl);
-    return BLOCKED_DOMAINS.includes(u.hostname.toLowerCase());
-  } catch { return false; }
-}
 
 // ── Authorization: check security.txt ──
 const axios = require('axios');
@@ -155,15 +147,6 @@ app.post('/api/precheck', async (req, res) => {
     return res.json({ allowed: false, reason: 'invalid_domain', error: validation.error });
   }
 
-  // Blocked domains
-  if (isDomainBlocked(targetUrl)) {
-    const bypass = req.body.bypass;
-    if (bypass !== '1') {
-      return res.json({ allowed: false, reason: 'blocked' });
-    }
-    return res.json({ allowed: true, method: 'bypass' });
-  }
-
   // Check for security.txt
   const hasSec = await hasSecurityTxt(targetUrl);
   if (hasSec) {
@@ -187,17 +170,10 @@ app.post('/api/scan', async (req, res) => {
     return res.status(400).json({ error: validation.error });
   }
 
-  // Block protected domains unless bypass=1
-  if (isDomainBlocked(targetUrl) && bypass !== '1') {
-    return res.status(403).json({ error: 'This domain is protected. Add ?=1 to the page URL to bypass.' });
-  }
-
   // Authorization check: security.txt or access code
-  if (!isDomainBlocked(targetUrl) || bypass === '1') {
-    const hasSec = await hasSecurityTxt(targetUrl);
-    if (!hasSec && accessCode !== '9921') {
-      return res.status(403).json({ error: 'Authorization required. Please provide a valid access code.' });
-    }
+  const hasSec = await hasSecurityTxt(targetUrl);
+  if (!hasSec && accessCode !== '9921') {
+    return res.status(403).json({ error: 'Authorization required. Please provide a valid access code.' });
   }
 
   const scanId = uuidv4();
