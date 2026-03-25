@@ -44,6 +44,7 @@ async function startScan(overrideCode){
     // Proceed with scan
     const body={target:raw};
     if(overrideCode)body.accessCode=overrideCode;
+    else body.precheckPassed=true;
     const r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const d=await r.json();
     if(d.error){alert(d.error);btn.disabled=false;btn.innerHTML='🔍 Scan';return;}
