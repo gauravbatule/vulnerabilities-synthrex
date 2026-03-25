@@ -29,7 +29,7 @@ async function startScan(overrideCode){
       const pcd=await pc.json();
       if(!pcd.allowed && pcd.reason==='blocked'){
         hideLoader();
-        alert('This domain is protected. Add ?=1 to the page URL to bypass.');
+        alert('This domain is protected and cannot be scanned.');
         btn.disabled=false;btn.innerHTML='🔍 Scan';return;
       }
       if(!pcd.allowed && pcd.reason==='invalid_domain'){
