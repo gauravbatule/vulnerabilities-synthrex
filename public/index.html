@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Synthrex — AI-Powered Security Scanner by Gaurav Batule</title>
+  <meta name="description" content="Synthrex is a free, open-source AI-powered website penetration testing tool with 1500+ security tests. Built by Gaurav Batule — cybersecurity developer and full-stack engineer.">
+  <meta name="keywords" content="Synthrex, Gaurav Batule, security scanner, penetration testing, vulnerability scanner, XSS, SQL injection, CORS, SSL, AI security, cybersecurity, web security, ethical hacking">
+  <meta name="author" content="Gaurav Batule">
+  <meta name="robots" content="index, follow">
+  <meta property="og:title" content="Synthrex — AI Security Scanner by Gaurav Batule">
+  <meta property="og:description" content="1500+ automated security tests with AI analysis. Free, open-source pentesting tool by Gaurav Batule.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Synthrex">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Synthrex — AI Security Scanner by Gaurav Batule">
+  <meta name="twitter:description" content="Enterprise-grade penetration testing tool. 1500+ tests, AI analysis, PDF reports. Built by Gaurav Batule.">
+  <link rel="canonical" href="https://synthrex.in">
+  <script type="application/ld+json">{
+    "@context":"https://schema.org","@type":"WebApplication","name":"Synthrex",
+    "description":"AI-Powered Website Security Scanner with 1500+ tests","url":"https://synthrex.in",
+    "applicationCategory":"SecurityApplication","operatingSystem":"Web",
+    "author":{"@type":"Person","name":"Gaurav Batule","url":"https://www.linkedin.com/in/gaurav-batule/",
+    "sameAs":["https://www.linkedin.com/in/gaurav-batule/","https://github.com/gauravbatule"],
+    "jobTitle":"Full Stack Developer & Cybersecurity Researcher"},
+    "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}
+  }</script>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2310b981'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='middle' text-anchor='middle' font-family='Arial,sans-serif' font-weight='900' font-size='20' fill='%23000'%3ES%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- NAVBAR -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <a href="/" class="brand">
+        <span class="brand-name">Synthrex</span>
+      </a>
+      <div class="nav-stats" id="navStats" style="display:none;">
+        <div class="stat"><span class="stat-val" id="nT">0</span><span class="stat-lbl">Tests</span></div>
+        <div class="stat stat-ok"><span class="stat-val" id="nP">0</span><span class="stat-lbl">Passed</span></div>
+        <div class="stat stat-err"><span class="stat-val" id="nF">0</span><span class="stat-lbl">Failed</span></div>
+        <div class="stat stat-wrn"><span class="stat-val" id="nW">0</span><span class="stat-lbl">Warns</span></div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container">
+    <!-- ═══ HERO ═══ -->
+    <section class="hero" id="hero">
+      <div class="hero-badge"><span class="pulse"></span>AI-Powered · 1500+ Tests</div>
+      <h1>Find vulnerabilities<br><span class="accent">before attackers do</span></h1>
+      <p class="hero-sub">Comprehensive security scanning across 18 modules — headers, SSL, XSS, SQLi, CORS, DNS, ports, and more. <br>Automated AI analysis with actionable remediation.</p>
+      <div class="search-wrap">
+        <div class="search-box">
+          <input id="inp" type="text" placeholder="Enter target domain — e.g. example.com" autocomplete="off" spellcheck="false">
+          <button id="btn" type="button" onclick="startScan()">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M14 14L10 10M11.33 6.67A4.67 4.67 0 1 1 2 6.67a4.67 4.67 0 0 1 9.33 0Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Scan
+          </button>
+        </div>
+        <p class="disclaimer">⚠ Only scan websites you own or have explicit authorization to test. <a href="/privacy.html">Terms apply</a>.</p>
+      </div>
+      <div class="module-tags">
+        <span>Security Headers</span><span>SSL/TLS</span><span>WAF Detection</span><span>Technology Stack</span>
+        <span>Cookie Security</span><span>CORS</span><span>Clickjacking</span><span>HTTP Methods</span>
+        <span>Open Redirects</span><span>Form Security</span><span>DNS & Email</span><span>Port Scan</span>
+        <span>Info Leakage</span><span>XSS</span><span>SQL Injection</span><span>Injections</span>
+        <span>Subdomains</span><span>Performance</span>
+      </div>
+    </section>
+
+    <!-- ═══ PROGRESS ═══ -->
+    <section id="prog" style="display:none;">
+      <div class="progress-circular">
+        <div class="progress-ring-wrap">
+          <svg viewBox="0 0 120 120" class="progress-ring-svg">
+            <circle cx="60" cy="60" r="52" fill="none" stroke="rgba(255,255,255,0.05)" stroke-width="6"/>
+            <circle id="pArc" cx="60" cy="60" r="52" fill="none" stroke="url(#pg)" stroke-width="6" stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7" transform="rotate(-90 60 60)"/>
+            <defs><linearGradient id="pg" x1="0%" y1="0%" x2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#34d399"/></linearGradient></defs>
+          </svg>
+          <div class="progress-ring-pct" id="pPct">0%</div>
+        </div>
+        <div class="progress-ring-info">
+          <span class="progress-ring-target">Scanning <strong id="pTarget"></strong></span>
+          <span class="progress-ring-scanner" id="pScan">Initializing…</span>
+          <span class="progress-ring-count" id="pCnt">0 tests</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ RESULTS ═══ -->
+    <section id="results" style="display:none;">
+      <!-- Dashboard Cards -->
+      <div class="dashboard" id="dashboard">
+        <div class="dash-card score-card">
+          <div class="score-ring-wrap">
+            <svg viewBox="0 0 100 100" class="score-ring">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="6"/>
+              <circle id="arc" cx="50" cy="50" r="42" fill="none" stroke="url(#sg)" stroke-width="6" stroke-linecap="round" stroke-dasharray="263.9" stroke-dashoffset="263.9" transform="rotate(-90 50 50)"/>
+              <defs><linearGradient id="sg" x1="0%" y1="0%" x2="100%"><stop offset="0%" stop-color="#10b981"/><stop offset="100%" stop-color="#f59e0b"/></linearGradient></defs>
+            </svg>
+            <div class="score-num" id="sNum">—</div>
+          </div>
+          <span class="score-label">Security Score</span>
+        </div>
+        <div class="dash-card sev-card">
+          <div class="sev-grid">
+            <div class="sev-item crit"><span class="sev-count" id="sC">0</span><span class="sev-name">Critical</span></div>
+            <div class="sev-item high"><span class="sev-count" id="sH">0</span><span class="sev-name">High</span></div>
+            <div class="sev-item med"><span class="sev-count" id="sM">0</span><span class="sev-name">Medium</span></div>
+            <div class="sev-item low"><span class="sev-count" id="sL">0</span><span class="sev-name">Low</span></div>
+            <div class="sev-item inf"><span class="sev-count" id="sI">0</span><span class="sev-name">Info</span></div>
+          </div>
+        </div>
+        <div class="dash-card actions-card">
+          <button class="action-btn primary" onclick="exportPdf()">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 12V14H14V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 2V12M9 12L5 8M9 12L13 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Export PDF Report
+          </button>
+          <button class="action-btn" onclick="toggleAll()">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5H15M3 9H15M3 13H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+            Toggle All Sections
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Report -->
+      <div class="ai-section" id="aiBox" style="display:none;">
+        <div class="ai-header">
+          <div class="ai-title">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2L2 6L10 10L18 6L10 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 14L10 18L18 14" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 10L10 14L18 10" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            AI Security Assessment
+          </div>
+          <span class="ai-badge">GPT-OSS-120B</span>
+        </div>
+        <article class="report" id="aiMd"></article>
+      </div>
+
+      <!-- Scanner Results -->
+      <div class="results-bar">
+        <h2 class="results-title">Scanner Results</h2>
+        <div class="filter-tabs">
+          <button class="ftab active" onclick="filter('all',this)">All <b id="fAll">0</b></button>
+          <button class="ftab" onclick="filter('fail',this)">Issues <b id="fIss">0</b></button>
+          <button class="ftab" onclick="filter('pass',this)">Passed <b id="fPas">0</b></button>
+        </div>
+      </div>
+      <div class="scanner-grid" id="rlist"></div>
+    </section>
+  </div>
+
+  <!-- Fullscreen Precheck Loader -->
+  <div id="precheckLoader">
+    <div class="loader-ring"></div>
+    <div class="loader-text">Verifying target…</div>
+    <div class="loader-sub">Checking security.txt &amp; domain validity</div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
