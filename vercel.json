@@ -30,9 +30,5 @@
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
       ]
     }
-  ],
-  "env": {
-    "GROQ_API_KEY": "@groq-api-key",
-    "PORT": "3000"
-  }
+  ]
 }
