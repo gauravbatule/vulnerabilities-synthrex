@@ -205,6 +205,14 @@ app.post('/api/scan', async (req, res) => {
   res.json({ scanId, target: targetUrl, status: 'running' });
 });
 
+// Per-scanner hard timeout to prevent any single scanner hanging the whole scan
+function withTimeout(promise, ms, name) {
+  return Promise.race([
+    promise,
+    new Promise((_, rej) => setTimeout(() => rej(new Error(`${name} exceeded ${ms / 1000}s timeout`)), ms))
+  ]);
+}
+
 async function runScan(scanId, targetUrl) {
   const scan = scans.get(scanId);
   if (!scan) return;
@@ -216,7 +224,7 @@ async function runScan(scanId, targetUrl) {
 
     try {
       console.log(`[${scanId.substring(0,8)}] Running: ${name}...`);
-      const result = await scanner.scan(targetUrl);
+      const result = await withTimeout(scanner.scan(targetUrl), 120000, name);
       scan.results.push(result);
 
       // Count test results

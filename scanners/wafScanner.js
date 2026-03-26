@@ -79,15 +79,15 @@ async function scan(targetUrl) {
       "{{7*7}}",
     ];
 
-    for (const payload of triggerPayloads) {
+    // Run trigger-payload tests in parallel (not sequential)
+    await Promise.all(triggerPayloads.map(async (payload) => {
       try {
         const testUrl = new URL(targetUrl);
         testUrl.searchParams.set('test', payload);
         const testResp = await axios.get(testUrl.toString(), {
-          timeout: 5000, maxRedirects: 3, validateStatus: () => true,
+          timeout: 4000, maxRedirects: 2, validateStatus: () => true,
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' }
         });
-
         if (testResp.status === 403 || testResp.status === 406 || testResp.status === 429) {
           results.tests.push({ id: `waf-trigger-${payload.substring(0,10).replace(/[^a-z0-9]/gi,'')}`, name: `WAF blocks attack payload (${testResp.status})`, status: 'info', severity: 'info' });
           results.detected.push({ name: 'WAF Active', source: 'trigger-test', triggerStatus: testResp.status });
@@ -95,15 +95,14 @@ async function scan(targetUrl) {
           results.tests.push({ id: `waf-trigger-${payload.substring(0,10).replace(/[^a-z0-9]/gi,'')}`, name: `WAF did not block payload`, status: 'info', severity: 'info' });
         }
       } catch { /* timeout/block */ }
-    }
+    }));
 
-    // Rate limiting check
+    // Rate limiting check — 5 parallel requests (fewer = less chance of banning our own IP)
     try {
-      const promises = [];
-      for (let i = 0; i < 10; i++) {
-        promises.push(axios.get(targetUrl, { timeout: 3000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } }));
-      }
-      const responses = await Promise.all(promises);
+      const promises = Array.from({ length: 5 }, () =>
+        axios.get(targetUrl, { timeout: 3000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } }).catch(() => null)
+      );
+      const responses = (await Promise.all(promises)).filter(Boolean);
       const blocked = responses.filter(r => r.status === 429 || r.status === 503);
       results.tests.push({ id: 'waf-rate-limit', name: 'Rate limiting active', status: blocked.length > 0 ? 'pass' : 'info', severity: 'info' });
     } catch { /* skip */ }

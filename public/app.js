@@ -87,6 +87,7 @@ function submitCode(){
   startScan(code);
 }
 
+
 async function pollStatus(){
   if(!scanId)return;
   try{
@@ -100,9 +101,11 @@ async function pollStatus(){
     q('#nP').textContent=s.totalPassed;
     q('#nF').textContent=s.totalFailed;
     q('#nW').textContent=s.totalWarnings;
+
     if(s.status==='completed'){clearInterval(poll);showResults(s);}
   }catch(e){console.error(e);}
 }
+
 
 function showResults(s){
   $('prog').style.display='none';
@@ -139,9 +142,12 @@ function renderList(results){
     const tests=r.results?.tests||[];
     const fails=tests.filter(t=>t.status==='fail');
     const warns=tests.filter(t=>t.status==='warn');
-    let bc='pass',bt=tests.length+' passed';
-    if(fails.length){bc='fail';bt=fails.length+' fail'+(warns.length?', '+warns.length+' warn':'');}
+    const passes=tests.filter(t=>t.status==='pass');
+    let bc='pass',bt;
+    if(tests.length===0){bc='pass';bt='✓ No issues';}
+    else if(fails.length){bc='fail';bt=fails.length+' fail'+(warns.length?', '+warns.length+' warn':'');}
     else if(warns.length){bc='warn';bt=warns.length+' warn';}
+    else{bt=passes.length+' passed';}
     const d=document.createElement('div');
     d.className='sc';d.dataset.type=bc;
     d.innerHTML=`<div class="sc-h" onclick="tog(this)"><span class="ic">${r.icon||'🔍'}</span><h4>${esc(r.scanner)}</h4><span class="badge ${bc}">${bt}</span><span class="chevron">▶</span></div><div class="sc-b">${renderTests(tests)}</div>`;
@@ -154,9 +160,13 @@ function renderList(results){
 }
 
 function renderTests(tests){
+  if(!tests||tests.length===0)return '<div class="test-row"><span class="dot info"></span><span class="test-name" style="color:var(--text3)">No data returned from this scanner</span></div>';
   const sorted=[...tests].sort((a,b)=>{const o={fail:0,warn:1,info:2,pass:3};return(o[a.status]??3)-(o[b.status]??3);});
   const show=sorted.slice(0,50);const rem=sorted.length-show.length;
-  let h=show.map(t=>`<div class="test-row"><span class="dot ${t.status}"></span><span class="test-name">${esc(t.name)}</span><span class="test-sev ${t.severity}">${t.severity}</span></div>`).join('');
+  let h=show.map(t=>{
+    const sevLabel=(t.status==='pass')?'info':t.severity;
+    return `<div class="test-row"><span class="dot ${t.status}"></span><span class="test-name">${esc(t.name)}</span><span class="test-sev ${sevLabel}">${sevLabel}</span></div>`;
+  }).join('');
   if(rem>0)h+=`<div class="test-row"><span class="dot info"></span><span class="test-name" style="color:var(--text3)">+ ${rem} more…</span></div>`;
   return h;
 }

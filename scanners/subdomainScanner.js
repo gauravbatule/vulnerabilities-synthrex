@@ -1,6 +1,4 @@
-const axios = require('axios');
 const dns = require('dns').promises;
-const url = require('url');
 
 // 300+ subdomains to enumerate
 const SUBDOMAINS = [
@@ -64,18 +62,30 @@ const SUBDOMAINS = [
   'sonarqube','sonar','codacy','codecov','coveralls','snyk','whitesource',
 ];
 
+// dns.resolve4 can hang on some resolvers — wrap with a hard timeout
+function dnsLookupWithTimeout(fqdn, ms = 3000) {
+  return Promise.race([
+    dns.resolve4(fqdn),
+    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))
+  ]);
+}
+
+const SCANNER_TIMEOUT = 60000; // 60s hard cap for the whole subdomain scan
+
 async function scan(targetUrl) {
   const results = { found: [], tests: [] };
+  const deadline = Date.now() + SCANNER_TIMEOUT;
   try {
     const hostname = new URL(targetUrl).hostname.replace(/^www\./, '');
-    const batchSize = 25;
+    const batchSize = 30;
     for (let i = 0; i < SUBDOMAINS.length; i += batchSize) {
+      if (Date.now() > deadline) break;  // hard stop
       const batch = SUBDOMAINS.slice(i, i + batchSize);
       const checks = batch.map(async (sub) => {
         const fqdn = `${sub}.${hostname}`;
         try {
-          const addrs = await dns.resolve4(fqdn);
-          if (addrs.length > 0) {
+          const addrs = await dnsLookupWithTimeout(fqdn, 3000);
+          if (addrs && addrs.length > 0) {
             let severity = 'info';
             const s = sub.toLowerCase();
             if (['admin','test','staging','dev','debug','backup','internal','phpmyadmin','jenkins','git','gitlab'].includes(s)) severity = 'medium';
