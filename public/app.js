@@ -1,6 +1,7 @@
 // Synthrex v3 — Production Build
 const API='';
-let scanId=null,poll=null,allOpen=false;
+let scanId=null,poll=null,allOpen=false,lastScan=null;
+console.log('Synthrex v2.7 loaded');
 
 
 
@@ -108,6 +109,7 @@ async function pollStatus(){
 
 
 function showResults(s){
+  lastScan=s;
   $('prog').style.display='none';
   $('results').style.display='block';
   let cr=0,hi=0,me=0,lo=0,inf=0,issueCards=0,passCards=0;
@@ -209,29 +211,30 @@ function renderMd(text){
   return h;
 }
 
-// PDF
+// PDF — server-side generation
 function exportPdf(){
-  const el=document.createElement('div');
-  el.style.cssText='padding:28px;font-family:Inter,sans-serif;color:#111;background:#fff;max-width:700px;';
-  const sn=$('sNum').textContent;
-  el.innerHTML=`<div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;border-bottom:2px solid #10b981;padding-bottom:12px"><div style="font-size:22px;font-weight:900;letter-spacing:-0.03em">Synthrex</div><div style="font-size:10px;color:#666">Security Report · ${new Date().toLocaleDateString()}</div></div>`;
-  el.innerHTML+=`<div style="display:flex;gap:16px;margin-bottom:16px;padding:14px;background:#f8f8f8;border-radius:10px;flex-wrap:wrap"><div style="text-align:center;min-width:60px"><div style="font-size:28px;font-weight:900;color:${parseInt(sn)>=75?'#10b981':parseInt(sn)>=40?'#f59e0b':'#ef4444'}">${sn}</div><div style="font-size:9px;color:#666;text-transform:uppercase">Score</div></div><div style="flex:1;font-size:12px;line-height:2.2"><span style="color:#ef4444">● Critical: ${$('sC').textContent}</span> &nbsp; <span style="color:#f97316">● High: ${$('sH').textContent}</span> &nbsp; <span style="color:#f59e0b">● Medium: ${$('sM').textContent}</span> &nbsp; <span style="color:#10b981">● Low: ${$('sL').textContent}</span></div></div>`;
-  el.innerHTML+=`<p style="font-size:10px;color:#666;margin-bottom:12px">Tests: ${q('#nT').textContent} · Passed: ${q('#nP').textContent} · Failed: ${q('#nF').textContent} · Warnings: ${q('#nW').textContent}</p>`;
-  const aiMd=$('aiMd').innerHTML;
-  if(aiMd)el.innerHTML+=`<div style="margin-bottom:20px"><h2 style="font-size:15px;border-bottom:1px solid #ddd;padding-bottom:4px;margin-bottom:8px">AI Assessment</h2><div style="font-size:12px;line-height:1.8;color:#333">${aiMd}</div></div>`;
-  document.querySelectorAll('.sc').forEach(card=>{
-    const t=card.querySelector('h4').textContent,b=card.querySelector('.badge').textContent,ic=card.querySelector('.ic').textContent;
-    let rows='';
-    card.querySelectorAll('.test-row').forEach(tr=>{
-      const n=tr.querySelector('.test-name')?.textContent||'',s=tr.querySelector('.test-sev')?.textContent||'',dot=tr.querySelector('.dot');
-      const c=dot.classList.contains('fail')?'#ef4444':dot.classList.contains('warn')?'#f59e0b':'#10b981';
-      rows+=`<div style="display:flex;align-items:center;gap:5px;padding:2px 0;font-size:10px;border-bottom:1px solid #f0f0f0"><span style="width:5px;height:5px;border-radius:50%;background:${c};flex-shrink:0"></span><span style="flex:1">${n}</span><span style="font-size:8px;font-weight:700;text-transform:uppercase;color:${c}">${s}</span></div>`;
+  if(!scanId){alert('No scan data available. Please run a scan first.');return;}
+  const btn=document.querySelector('.action-btn.primary');
+  const orig=btn.innerHTML;
+  btn.innerHTML='⏳ Generating...';btn.disabled=true;
+  // First verify scan exists via the lightweight status endpoint
+  fetch(`${API}/api/scan/${scanId}`)
+    .then(r=>{
+      if(!r.ok) throw new Error('Scan not found. The server may have restarted — please run a new scan.');
+      return r.json();
+    })
+    .then(scan=>{
+      if(scan.status!=='completed') throw new Error('Scan is still running. Please wait for it to complete.');
+      // Navigate directly to PDF URL with filename in path — single request, browser handles download
+      const fname='Synthrex-Report-'+new Date().toISOString().slice(0,10)+'.pdf';
+      window.location.href = `${API}/api/export-pdf/${scanId}/${fname}`;
+      setTimeout(()=>{ btn.innerHTML=orig;btn.disabled=false; }, 3000);
+    })
+    .catch(e=>{
+      console.error('PDF Export Error:', e);
+      alert(e.message);
+      btn.innerHTML=orig;btn.disabled=false;
     });
-    el.innerHTML+=`<div style="margin-bottom:8px;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden"><div style="padding:8px 12px;background:#f8f8f8;border-bottom:1px solid #e0e0e0;display:flex;justify-content:space-between"><span style="font-weight:600;font-size:12px">${ic} ${t}</span><span style="font-size:9px;font-weight:600;padding:1px 6px;border-radius:100px;background:#f0f0f0">${b}</span></div><div style="padding:6px 12px">${rows}</div></div>`;
-  });
-  el.innerHTML+=`<div style="margin-top:16px;padding-top:8px;border-top:1px solid #ddd;text-align:center;font-size:9px;color:#999">Synthrex Security Report · Built by Gaurav Batule · synthrex.in</div>`;
-  document.body.appendChild(el);
-  html2pdf().set({margin:[8,8,8,8],filename:`synthrex-${new Date().toISOString().slice(0,10)}.pdf`,image:{type:'jpeg',quality:0.95},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(el).save().then(()=>el.remove());
 }
 
 function $(id){return document.getElementById(id);}
