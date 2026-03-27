@@ -33,6 +33,13 @@ const mixedContentScanner = require('./scanners/mixedContentScanner');
 const contentSecScanner = require('./scanners/contentSecScanner');
 const dnssecScanner = require('./scanners/dnssecScanner');
 const websocketScanner = require('./scanners/websocketScanner');
+const crlfScanner = require('./scanners/crlfScanner');
+const rateLimitScanner = require('./scanners/rateLimitScanner');
+const graphqlScanner = require('./scanners/graphqlScanner');
+const jwtScanner = require('./scanners/jwtScanner');
+const subdomainTakeoverScanner = require('./scanners/subdomainTakeoverScanner');
+const cachePoisonScanner = require('./scanners/cachePoisonScanner');
+const errorDisclosureScanner = require('./scanners/errorDisclosureScanner');
 
 // AI Analyzer
 const groqAnalyzer = require('./ai/groqAnalyzer');
@@ -92,6 +99,13 @@ const SCANNERS = [
   { id: 'contentsec', scanner: contentSecScanner, name: 'Content Security', icon: '🔎' },
   { id: 'dnssec', scanner: dnssecScanner, name: 'DNSSEC Validation', icon: '🔐' },
   { id: 'websocket', scanner: websocketScanner, name: 'WebSocket Security', icon: '🔗' },
+  { id: 'crlf', scanner: crlfScanner, name: 'CRLF Injection', icon: '💀' },
+  { id: 'ratelimit', scanner: rateLimitScanner, name: 'Rate Limiting', icon: '⏱️' },
+  { id: 'graphql', scanner: graphqlScanner, name: 'GraphQL Introspection', icon: '🔮' },
+  { id: 'jwt', scanner: jwtScanner, name: 'JWT Security', icon: '🎟️' },
+  { id: 'subdomaintakeover', scanner: subdomainTakeoverScanner, name: 'Subdomain Takeover', icon: '🏴' },
+  { id: 'cachepoison', scanner: cachePoisonScanner, name: 'Cache Poisoning', icon: '💣' },
+  { id: 'errordisclosure', scanner: errorDisclosureScanner, name: 'Error Disclosure', icon: '🐛' },
 ];
 
 function normalizeUrl(input) {
