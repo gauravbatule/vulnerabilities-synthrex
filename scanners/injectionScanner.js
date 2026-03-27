@@ -44,16 +44,16 @@ const LDAP_PAYLOADS = [
   { payload: '*)(uid=*))(|(uid=*', name: 'LDAP injection', category: 'ldap' },
 ];
 
+// Only indicators that mean injection ACTUALLY WORKED — not generic error strings
+// Removed: /internal server error/i, /syntax error/i, /parse error/i, /exception/i,
+//          /stack trace/i, /traceback/i, /warn.*php/i, /fatal.*error/i
+//          /undefined.*variable/i, /null.*pointer/i — these all match normal error pages
 const ERROR_INDICATORS = [
-  /root:.*:0:0/i, /daemon:.*:1:1/i,
-  /\buid=\d+/i, /\bgid=\d+/i,
-  /directory listing/i, /index of/i,
-  /syntax error/i, /parse error/i,
-  /stack trace/i, /exception/i, /traceback/i,
-  /warn.*php/i, /fatal.*error/i,
-  /internal server error/i,
-  /undefined.*variable/i, /null.*pointer/i,
-  /command not found/i, /permission denied/i,
+  /root:.*:0:0/i, /daemon:.*:1:1/i,   // passwd file contents (LFI/path traversal success)
+  /\buid=\d+.*gid=\d+/i,              // whoami/id output (command injection success)
+  /directory listing for \//i,          // directory listing (path traversal success)
+  /index of \//i,                       // Apache directory index
+  /command not found/i,                 // shell reached but command failed (still proves injection)
 ];
 
 const PARAMS = ['url', 'file', 'path', 'page', 'cmd'];  // only 5 params
@@ -101,8 +101,20 @@ async function scan(targetUrl) {
               }
             }
 
-            if (injection.expected && body.includes(injection.expected)) {
-              return { param, injection, type: 'ssti', severity: 'critical' };
+            // SSTI check: compare against a clean baseline to avoid FP
+            // (e.g. '49' appears in prices, CSS, counters on normal pages)
+            if (injection.expected && injection.expected.length > 0 && body.includes(injection.expected)) {
+              // Get baseline without SSTI payload to check if '49' was already there
+              try {
+                const baselineUrl = new URL(targetUrl);
+                baselineUrl.searchParams.set(param, 'normalvalue');
+                const baseResp = await safeGet(baselineUrl.toString());
+                const baseBody = baseResp && typeof baseResp.data === 'string' ? baseResp.data : '';
+                if (!baseBody.includes(injection.expected)) {
+                  // '49' appeared only after injecting {{7*7}} — real SSTI
+                  return { param, injection, type: 'ssti', severity: 'critical' };
+                }
+              } catch { /* skip baseline check — don't flag */ }
             }
           } catch { /* skip */ }
         }

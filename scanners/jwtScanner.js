@@ -87,21 +87,29 @@ async function scan(targetUrl) {
     if (allTokens.size === 0) {
       results.tests.push({ id: 'jwt-none-found', name: 'No JWT tokens detected in response', status: 'pass', severity: 'info' });
     } else {
-      results.tests.push({
-        id: 'jwt-found',
-        name: `${allTokens.size} JWT token(s) detected in response`,
-        status: 'warn', severity: 'medium'
-      });
-
-      // Analyze each unique token
-      let tokenIdx = 0;
+      // Filter to only confirmed JWTs (valid header with alg/typ + valid payload)
+      const confirmedJwts = [];
       for (const token of allTokens) {
-        if (tokenIdx >= 5) break; // Limit analysis to 5 tokens
         const jwt = analyzeJwt(token);
-        if (!jwt) continue;
+        if (jwt) confirmedJwts.push({ ...jwt, token });
+      }
+
+      if (confirmedJwts.length === 0) {
+        results.tests.push({ id: 'jwt-none-found', name: 'No valid JWT tokens detected in response', status: 'pass', severity: 'info' });
+      } else {
+        results.tests.push({
+          id: 'jwt-found',
+          name: `${confirmedJwts.length} JWT token(s) detected in response`,
+          status: 'warn', severity: 'medium'
+        });
+
+      // Analyze each confirmed token
+      let tokenIdx = 0;
+      for (const jwt of confirmedJwts) {
+        if (tokenIdx >= 5) break;
 
         const { header, payload } = jwt;
-        const src = sources.find(s => s.token === token)?.source || 'unknown';
+        const src = sources.find(s => s.token === jwt.token)?.source || 'unknown';
         const prefix = `jwt-${tokenIdx}`;
 
         // Test: Algorithm check
@@ -166,6 +174,7 @@ async function scan(targetUrl) {
 
         tokenIdx++;
       }
+      }  // close else (confirmedJwts.length > 0)
     }
 
     // Test: Check for JWT-related headers

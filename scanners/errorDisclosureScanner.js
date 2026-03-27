@@ -5,7 +5,9 @@ const axios = require('axios');
 // FP prevention: Matches 30+ specific framework error fingerprints, not generic strings
 // FN prevention: Triggers errors via multiple methods (bad content-type, invalid JSON, etc.)
 
-// Very specific error fingerprints — these only appear in real stack traces/debug output
+// Very specific error fingerprints — each pattern should ONLY appear in actual error output,
+// not in normal page content, documentation, or blog posts.
+// Removed generic/ambiguous patterns that caused false positives.
 const ERROR_FINGERPRINTS = {
   python: [
     { pattern: 'Traceback (most recent call last)', name: 'Python Traceback', severity: 'critical' },
@@ -18,57 +20,44 @@ const ERROR_FINGERPRINTS = {
     { pattern: 'The debugger caught an exception', name: 'Python debugger active', severity: 'critical' },
   ],
   php: [
-    { pattern: 'Fatal error:</b>', name: 'PHP Fatal Error', severity: 'high' },
-    { pattern: 'Parse error:</b>', name: 'PHP Parse Error', severity: 'high' },
-    { pattern: 'Warning:</b>', name: 'PHP Warning', severity: 'medium' },
-    { pattern: 'Stack trace:', name: 'PHP Stack Trace', severity: 'high' },
+    // Require the HTML <b> tags that PHP error handler specifically outputs (not in normal pages)
+    { pattern: '<b>Fatal error</b>', name: 'PHP Fatal Error', severity: 'high' },
+    { pattern: '<b>Parse error</b>', name: 'PHP Parse Error', severity: 'high' },
+    { pattern: '<b>Warning</b>:', name: 'PHP Warning', severity: 'medium' },
     { pattern: 'on line <b>', name: 'PHP line number disclosure', severity: 'high' },
     { pattern: 'Symfony\\Component\\', name: 'Symfony framework error', severity: 'high' },
-    { pattern: 'Laravel\\', name: 'Laravel framework error', severity: 'high' },
-    { pattern: 'Whoops\\', name: 'Whoops error handler', severity: 'high' },
-    { pattern: 'vendor/laravel/', name: 'Laravel path leak', severity: 'high' },
+    { pattern: 'Whoops\\Handler\\', name: 'Whoops error handler', severity: 'high' },
+    { pattern: 'vendor/laravel/framework', name: 'Laravel path leak', severity: 'high' },
   ],
   java: [
     { pattern: 'java.lang.NullPointerException', name: 'Java NullPointerException', severity: 'high' },
-    { pattern: 'java.lang.Exception', name: 'Java Exception trace', severity: 'high' },
-    { pattern: 'at org.apache.', name: 'Apache stack trace', severity: 'high' },
-    { pattern: 'at org.springframework.', name: 'Spring stack trace', severity: 'high' },
+    { pattern: 'java.lang.ClassNotFoundException', name: 'Java ClassNotFoundException', severity: 'high' },
+    { pattern: 'at org.apache.catalina.', name: 'Tomcat stack trace', severity: 'high' },
+    { pattern: 'at org.springframework.web.', name: 'Spring Web stack trace', severity: 'high' },
     { pattern: 'javax.servlet.ServletException', name: 'Servlet exception', severity: 'high' },
-    { pattern: 'org.hibernate.', name: 'Hibernate error', severity: 'high' },
-    { pattern: 'com.sun.', name: 'Java internal path', severity: 'medium' },
   ],
   dotnet: [
     { pattern: 'System.NullReferenceException', name: '.NET NullReference', severity: 'high' },
     { pattern: 'System.Web.HttpException', name: '.NET HTTP Exception', severity: 'high' },
-    { pattern: 'Server Error in', name: 'ASP.NET server error', severity: 'high' },
-    { pattern: 'Stack Trace:</b>', name: 'ASP.NET stack trace', severity: 'high' },
-    { pattern: 'System.Data.SqlClient', name: '.NET SQL error leak', severity: 'critical' },
-    { pattern: '[SqlException', name: '.NET SQL Exception', severity: 'critical' },
-    { pattern: 'Microsoft.AspNetCore.', name: 'ASP.NET Core error', severity: 'high' },
+    { pattern: '<b>Stack Trace:</b>', name: 'ASP.NET stack trace', severity: 'high' },
+    { pattern: 'System.Data.SqlClient.SqlException', name: '.NET SQL error leak', severity: 'critical' },
+    { pattern: 'Microsoft.AspNetCore.Diagnostics', name: 'ASP.NET Core diagnostics page', severity: 'high' },
   ],
   node: [
-    { pattern: 'at Object.<anonymous>', name: 'Node.js stack trace', severity: 'high' },
     { pattern: 'at Module._compile', name: 'Node.js module error', severity: 'high' },
-    { pattern: 'node_modules/', name: 'Node.js path leak', severity: 'medium' },
+    { pattern: 'at Object.<anonymous> (/', name: 'Node.js stack trace with path', severity: 'high' },
     { pattern: 'SyntaxError: Unexpected token', name: 'Node.js JSON parse error', severity: 'medium' },
-    { pattern: 'Cannot read propert', name: 'Node.js TypeError', severity: 'medium' },
-    { pattern: 'express deprecated', name: 'Express deprecation warning', severity: 'low' },
   ],
   database: [
     { pattern: 'SQLSTATE[', name: 'SQL state error', severity: 'critical' },
     { pattern: 'syntax error at or near', name: 'PostgreSQL syntax error', severity: 'critical' },
     { pattern: 'You have an error in your SQL syntax', name: 'MySQL syntax error', severity: 'critical' },
-    { pattern: 'ORA-', name: 'Oracle database error', severity: 'critical' },
-    { pattern: 'Microsoft OLE DB Provider', name: 'MSSQL OLE error', severity: 'critical' },
+    { pattern: 'ORA-0', name: 'Oracle database error', severity: 'critical' },
+    { pattern: 'ORA-1', name: 'Oracle database error (1xxx)', severity: 'critical' },
+    { pattern: 'Microsoft OLE DB Provider for SQL', name: 'MSSQL OLE error', severity: 'critical' },
     { pattern: 'pg_query():', name: 'PostgreSQL query error', severity: 'critical' },
     { pattern: 'SQLite3::query', name: 'SQLite error', severity: 'critical' },
-    { pattern: 'MongoDB server', name: 'MongoDB error', severity: 'high' },
   ],
-  generic: [
-    { pattern: 'DOCUMENT_ROOT', name: 'Document root leak', severity: 'high' },
-    { pattern: 'phpMyAdmin', name: 'phpMyAdmin reference', severity: 'medium' },
-    { pattern: 'X-Powered-By', name: 'Server tech disclosure', severity: 'low' },
-  ]
 };
 
 // Methods to trigger errors

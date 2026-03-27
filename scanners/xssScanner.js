@@ -87,19 +87,46 @@ async function scan(targetUrl) {
       }
     }
 
-    // 2. DOM sink analysis
+    // 2. DOM sink analysis — only check inline scripts for dangerous source+sink combos
+    //    (checking the full page would FP on every site that bundles JS with these API names)
     const r = await safeGet(targetUrl);
     if (r) {
       const body = typeof r.data === 'string' ? r.data : '';
-      for (const sink of DOM_SINKS) {
-        const found = body.includes(sink);
+
+      // Extract only inline script contents (not external JS file references)
+      const inlineScripts = [];
+      const scriptRegex = /<script(?![^>]*\bsrc\b)[^>]*>([\s\S]*?)<\/script>/gi;
+      let match;
+      while ((match = scriptRegex.exec(body)) !== null) {
+        if (match[1].trim().length > 0) inlineScripts.push(match[1]);
+      }
+      const inlineCode = inlineScripts.join('\n');
+
+      // Only flag sinks when they appear with user-controllable sources in the same inline block
+      const DANGEROUS_SINKS = ['document.write(', 'innerHTML', 'outerHTML', 'eval(', 'Function('];
+      const USER_SOURCES = ['location.', 'document.referrer', 'window.name', 'document.URL', 'document.cookie', 'location.hash', 'location.search'];
+
+      const hasSink = DANGEROUS_SINKS.some(s => inlineCode.includes(s));
+      const hasSource = USER_SOURCES.some(s => inlineCode.includes(s));
+
+      if (hasSink && hasSource) {
         results.tests.push({
-          id: `xss-sink-${sink.replace(/[^a-z]/gi, '')}`,
-          name: `DOM XSS sink — ${sink}`,
-          status: found ? 'warn' : 'pass',
-          severity: found ? 'medium' : 'info'
+          id: 'xss-dom-sink-source',
+          name: 'DOM XSS risk: user-controllable source used with dangerous sink in inline script',
+          status: 'warn', severity: 'high'
         });
-        if (found) results.findings.push({ sink, type: 'dom_sink' });
+      } else if (hasSink) {
+        results.tests.push({
+          id: 'xss-dom-sink-only',
+          name: 'DOM sinks found in inline scripts (no user-controllable source detected)',
+          status: 'pass', severity: 'info'
+        });
+      } else {
+        results.tests.push({
+          id: 'xss-dom-safe',
+          name: 'No dangerous DOM sinks in inline scripts',
+          status: 'pass', severity: 'info'
+        });
       }
 
       // 3. CSP header check

@@ -117,16 +117,20 @@ async function scan(targetUrl) {
           headers: { 'User-Agent': ua }
         });
 
-        // Check if response includes dynamic/user content but was served with caching headers
-        const hasCache = r.headers['cache-control'] && (
-          r.headers['cache-control'].includes('public') ||
-          r.headers['cache-control'].includes('max-age')
-        );
-        const hasSensitive = typeof r.data === 'string' && (
-          /<form[^>]*action/i.test(r.data) || /csrf|token|session/i.test(r.data)
+        // Strict cache check: must have public caching AND no private/no-store
+        const cc = (r.headers['cache-control'] || '').toLowerCase();
+        const isCached = cc.includes('public') && !cc.includes('private') && !cc.includes('no-store');
+
+        // Strict content check: must contain actual user-specific dynamic indicators
+        // (not just any page that mentions "csrf" — e.g. documentation pages)
+        const body = typeof r.data === 'string' ? r.data : '';
+        const hasSensitive = (
+          (/name=["']csrf/i.test(body) && /<form/i.test(body)) ||  // CSRF token in a real form
+          /Set-Cookie.*session/i.test(r.headers['set-cookie'] || '') ||  // Session cookie
+          /<input[^>]*type=["']hidden["'][^>]*token/i.test(body)  // Hidden token field
         );
 
-        if (hasCache && hasSensitive && r.status === 200) {
+        if (isCached && hasSensitive && r.status === 200) {
           results.tests.push({
             id: `cache-deception-${deceptionPaths.indexOf(dp)}`,
             name: `Web Cache Deception: dynamic content cached at ${dp}`,

@@ -58,7 +58,7 @@ const VULNERABLE_SERVICES = [
   {
     name: 'WordPress.com',
     cnames: ['wordpress.com'],
-    fingerprints: ["doesn't exist", 'Do you want to register'],
+    fingerprints: ['Do you want to register', 'doesn&#8217;t exist'],  // WordPress uses smart quotes
   },
   {
     name: 'Surge.sh',
@@ -83,7 +83,7 @@ const VULNERABLE_SERVICES = [
   {
     name: 'Fly.io',
     cnames: ['fly.dev'],
-    fingerprints: ['404 Not Found'],
+    fingerprints: ['this host is not configured to serve on Fly'],
   },
   {
     name: 'Vercel',
@@ -162,8 +162,8 @@ async function scan(targetUrl) {
             // HTTP failed — still report CNAME but don't confirm takeover
             results.tests.push({
               id: `takeover-cname-${sub}`,
-              name: `${fqdn} has CNAME to ${service.name} (HTTP unreachable)`,
-              status: 'warn', severity: 'high'
+              name: `${fqdn} has CNAME to ${service.name} (HTTP unreachable — check manually)`,
+              status: 'warn', severity: 'medium'
             });
           }
           break; // Only check first matching service

@@ -298,6 +298,21 @@ async function scan(targetUrl) {
   const results = { found: [], notFound: [], tests: [] };
   try {
     const baseUrl = targetUrl.replace(/\/$/, '');
+
+    // Soft-404 baseline: fetch a known-nonexistent path to detect SPAs/CDNs that return 200 for everything
+    let baselineBody = '';
+    let baselineLength = 0;
+    try {
+      const baseline = await axios.get(`${baseUrl}/synthrex_nonexistent_path_9f8a7b6c5d`, {
+        timeout: 6000, maxRedirects: 3, validateStatus: () => true,
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' }
+      });
+      if (baseline.status >= 200 && baseline.status < 400) {
+        baselineBody = typeof baseline.data === 'string' ? baseline.data : '';
+        baselineLength = baselineBody.length;
+      }
+    } catch { /* baseline failed — continue without */ }
+
     const batchSize = 15;
     for (let i = 0; i < PATHS.length; i += batchSize) {
       const batch = PATHS.slice(i, i + batchSize);
@@ -308,8 +323,16 @@ async function scan(targetUrl) {
             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' }
           });
           const ok = r.status >= 200 && r.status < 400;
-          const hasContent = r.data && (typeof r.data === 'string' ? r.data.length > 50 : true);
-          if (ok && hasContent) {
+          const body = typeof r.data === 'string' ? r.data : '';
+          const hasContent = body.length > 50;
+
+          // Soft-404 check: if body is nearly identical to baseline, it's a custom 404 page
+          const isSoft404 = baselineLength > 0 && hasContent && (
+            body === baselineBody ||
+            Math.abs(body.length - baselineLength) < 100  // within 100 chars of baseline
+          );
+
+          if (ok && hasContent && !isSoft404) {
             results.found.push({ path: item.path, name: item.name, severity: item.severity, status: r.status, cat: item.cat });
             results.tests.push({ id: `info-${item.path}`, name: `${item.name} accessible`, status: 'fail', severity: item.severity });
           } else {

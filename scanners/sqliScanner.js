@@ -24,15 +24,19 @@ const PAYLOADS = [
   "'; SELECT 1;--",
 ];
 
+// Tightened to very specific SQL error strings only (no generic words)
 const ERROR_PATTERNS = [
-  'sql syntax', 'mysql_', 'mysqli_', 'pg_query', 'sqlite3', 'ORA-', 'SQL Server', 'ODBC',
-  'you have an error in your sql', 'unclosed quotation mark', 'quoted string not properly terminated',
-  'syntax error at or near', 'microsoft ole db provider', 'jet database engine',
-  'Warning: mysql', 'Warning: pg_', 'Warning: sqlite', 'PSQLException', 'org.postgresql',
-  'com.mysql.jdbc', 'java.sql.SQLException', 'System.Data.SqlClient',
-  'PDOException', 'MongoError', 'OperationalError', 'ProgrammingError',
-  'django.db.utils', 'sqlalchemy.exc', 'no such table', 'relation.*does not exist',
-  'XPATH syntax error', 'extractvalue', 'updatexml',
+  'error in your sql syntax', 'mysql_fetch', 'mysqli_', 'pg_query', 'sqlite3.',
+  'ORA-0', 'ORA-1',  // Oracle errors always followed by digits
+  'SQL Server Driver', 'microsoft ole db provider',
+  'unclosed quotation mark', 'quoted string not properly terminated',
+  'syntax error at or near', 'jet database engine',
+  'Warning: mysql_', 'Warning: pg_', 'Warning: sqlite',
+  'PSQLException', 'org.postgresql',
+  'com.mysql.jdbc', 'java.sql.SQLException', 'System.Data.SqlClient.SqlException',
+  'PDOException', 'MongoError', 'OperationalError',
+  'django.db.utils', 'sqlalchemy.exc', 'no such table',
+  'XPATH syntax error', 'extractvalue(', 'updatexml(',
 ];
 
 // Top 4 params only
