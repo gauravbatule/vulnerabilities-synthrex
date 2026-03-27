@@ -70,6 +70,7 @@ function showCodeModal(){
     m.innerHTML=`<div class="modal-overlay"><div class="modal-box">
       <h3>Authorization Required</h3>
       <p>This website does not have a <code>security.txt</code> file.<br>Enter the access code to confirm you have authorization to scan this target.</p>
+      <p style="font-size:12px;color:#999;margin-bottom:16px;">Don't have an access code? <a href="https://www.linkedin.com/in/gaurav-batule/" target="_blank" rel="noopener noreferrer" style="color:#10b981;text-decoration:none;font-weight:600;">Contact me on LinkedIn</a> to get one.</p>
       <input type="text" id="codeInp" placeholder="Enter access code" autocomplete="off" maxlength="10">
       <div class="modal-btns">
         <button onclick="hideCodeModal()" class="btn-secondary">Cancel</button>
