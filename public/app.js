@@ -1,7 +1,5 @@
-// Synthrex v3 — Production Build
 const API='';
 let scanId=null,poll=null,allOpen=false,lastScan=null;
-console.log('Synthrex v2.7 loaded');
 
 
 
@@ -21,7 +19,7 @@ async function startScan(overrideCode){
   if(!raw){alert('Enter a domain');return;}
   const btn=$('btn');btn.disabled=true;btn.innerHTML='Checking…';
   try{
-    // Pre-check: security.txt or access code required?
+
     if(!overrideCode){
       showLoader();
       const body={target:raw};
@@ -39,10 +37,10 @@ async function startScan(overrideCode){
         showCodeModal();
         btn.disabled=false;btn.innerHTML='🔍 Scan';return;
       }
-      // Has security.txt — proceed directly
+
       hideLoader();
     }
-    // Proceed with scan
+
     const body={target:raw};
     if(overrideCode)body.accessCode=overrideCode;
     else body.precheckPassed=true;
@@ -58,7 +56,7 @@ async function startScan(overrideCode){
     poll=setInterval(pollStatus,1200);
   }catch(e){
     hideLoader();
-    console.error(e);btn.disabled=false;btn.innerHTML='🔍 Scan';
+    btn.disabled=false;btn.innerHTML='🔍 Scan';
     alert('Cannot reach server.');
   }
 }
@@ -105,7 +103,7 @@ async function pollStatus(){
     q('#nW').textContent=s.totalWarnings;
 
     if(s.status==='completed'){clearInterval(poll);showResults(s);}
-  }catch(e){console.error(e);}
+  }catch(e){}
 }
 
 
@@ -190,7 +188,7 @@ function filter(f,btn){
   });
 }
 
-// AI
+
 async function runAi(){
   if(!scanId)return;
   try{
@@ -199,12 +197,12 @@ async function runAi(){
     const md=d.success?d.analysis:(d.fallbackAnalysis||d.error||'Analysis not available');
     $('aiMd').innerHTML=renderMd(md);
     $('aiBox').style.display='block';
-  }catch(e){console.error('AI:',e);}
+  }catch(e){}
 }
 function renderMd(text){
   if(!text)return '';
   if(typeof marked!=='undefined'&&marked.parse){
-    try{marked.setOptions({breaks:true,gfm:true});return marked.parse(text);}catch(e){console.warn(e);}
+    try{marked.setOptions({breaks:true,gfm:true});return marked.parse(text);}catch(e){}
   }
   let h=esc(text);
   h=h.replace(/^### (.+)$/gm,'<h3>$1</h3>').replace(/^## (.+)$/gm,'<h2>$1</h2>').replace(/^# (.+)$/gm,'<h1>$1</h1>');
@@ -212,13 +210,13 @@ function renderMd(text){
   return h;
 }
 
-// PDF — server-side generation
+
 function exportPdf(){
   if(!scanId){alert('No scan data available. Please run a scan first.');return;}
   const btn=document.querySelector('.action-btn.primary');
   const orig=btn.innerHTML;
   btn.innerHTML='⏳ Generating...';btn.disabled=true;
-  // First verify scan exists via the lightweight status endpoint
+
   fetch(`${API}/api/scan/${scanId}`)
     .then(r=>{
       if(!r.ok) throw new Error('Scan not found. The server may have restarted — please run a new scan.');
@@ -226,13 +224,13 @@ function exportPdf(){
     })
     .then(scan=>{
       if(scan.status!=='completed') throw new Error('Scan is still running. Please wait for it to complete.');
-      // Navigate directly to PDF URL with filename in path — single request, browser handles download
+
       const fname='Synthrex-Report-'+new Date().toISOString().slice(0,10)+'.pdf';
       window.location.href = `${API}/api/export-pdf/${scanId}/${fname}`;
       setTimeout(()=>{ btn.innerHTML=orig;btn.disabled=false; }, 3000);
     })
     .catch(e=>{
-      console.error('PDF Export Error:', e);
+
       alert(e.message);
       btn.innerHTML=orig;btn.disabled=false;
     });
