@@ -1,7 +1,5 @@
 const API='';
-let scanId=null,poll=null,allOpen=false,lastScan=null;
-
-
+let lastScan=null,allOpen=false;
 
 function normalizeTarget(t){
   t=t.trim();if(!t)return '';
@@ -26,12 +24,12 @@ async function startScan(overrideCode){
       const pc=await fetch(`${API}/api/precheck`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
       const pcd=await pc.json();
 
-      if(!pcd.allowed && pcd.reason==='invalid_domain'){
+      if(!pcd.allowed&&pcd.reason==='invalid_domain'){
         hideLoader();
         alert(pcd.error || 'This domain does not exist or is unreachable.');
         btn.disabled=false;btn.innerHTML='🔍 Scan';return;
       }
-      if(!pcd.allowed && pcd.requireCode){
+      if(!pcd.allowed&&pcd.requireCode){
         hideLoader();
         pendingTarget=raw;
         showCodeModal();
@@ -41,20 +39,72 @@ async function startScan(overrideCode){
       hideLoader();
     }
 
-    const body={target:raw};
-    if(overrideCode)body.accessCode=overrideCode;
-    else body.precheckPassed=true;
-    const r=await fetch(`${API}/api/scan`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
-    const d=await r.json();
-    if(d.error){alert(d.error);btn.disabled=false;btn.innerHTML='🔍 Scan';return;}
-    scanId=d.scanId;
-    pollErrors=0;
     hideCodeModal();
+
+    // Fetch scanner list
+    const slResp=await fetch(`${API}/api/scanners`);
+    const scannerList=await slResp.json();
+
+    // Show progress UI
     $('hero').style.display='none';
     $('prog').style.display='block';
-    $('pTarget').textContent=d.target;
+    $('pTarget').textContent=raw;
     $('navStats').style.display='flex';
-    poll=setInterval(pollStatus,1200);
+
+    // Client-side orchestration: run each scanner individually
+    const allResults=[];
+    let totalTests=0,totalPassed=0,totalFailed=0,totalWarnings=0;
+
+    for(let i=0;i<scannerList.length;i++){
+      const sc=scannerList[i];
+
+      // Update progress
+      const progress=Math.round((i/scannerList.length)*100);
+      $('pArc').style.strokeDashoffset=326.7*(1-progress/100);
+      $('pPct').textContent=progress+'%';
+      $('pScan').textContent=sc.name;
+      $('pCnt').textContent=totalTests+' tests';
+
+      try{
+        const r=await fetch(`${API}/api/run-scanner`,{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({target:raw,scannerId:sc.id})
+        });
+        const result=await r.json();
+        if(result&&result.scanner){
+          allResults.push(result);
+          const tests=result.results?.tests||[];
+          totalTests+=tests.length;
+          totalPassed+=tests.filter(t=>t.status==='pass').length;
+          totalFailed+=tests.filter(t=>t.status==='fail').length;
+          totalWarnings+=tests.filter(t=>t.status==='warn').length;
+        }else{
+          allResults.push({scanner:sc.name,icon:sc.icon,results:{tests:[]},testCount:0});
+        }
+      }catch(e){
+        allResults.push({scanner:sc.name,icon:sc.icon,results:{tests:[],error:e.message},testCount:0});
+      }
+
+      // Update nav stats live
+      q('#nT').textContent=totalTests;
+      q('#nP').textContent=totalPassed;
+      q('#nF').textContent=totalFailed;
+      q('#nW').textContent=totalWarnings;
+    }
+
+    // Mark 100%
+    $('pArc').style.strokeDashoffset=0;
+    $('pPct').textContent='100%';
+    $('pScan').textContent='Complete';
+
+    showResults({
+      target:raw,
+      status:'completed',
+      results:allResults,
+      totalTests,totalPassed,totalFailed,totalWarnings
+    });
+
   }catch(e){
     hideLoader();
     btn.disabled=false;btn.innerHTML='🔍 Scan';
@@ -89,58 +139,6 @@ function submitCode(){
 }
 
 
-let pollErrors=0;
-async function pollStatus(){
-  if(!scanId)return;
-  try{
-    const r=await fetch(`${API}/api/scan/${scanId}`);
-    if(!r.ok){
-      pollErrors++;
-      if(pollErrors>=3){
-        clearInterval(poll);
-        $('prog').style.display='none';$('hero').style.display='block';
-        $('navStats').style.display='none';
-        $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
-        alert('Scan session lost. The server may have restarted — please run a new scan.');
-      }
-      return;
-    }
-    const s=await r.json();
-    if(s.error||s.progress===undefined){
-      pollErrors++;
-      if(pollErrors>=3){
-        clearInterval(poll);
-        $('prog').style.display='none';$('hero').style.display='block';
-        $('navStats').style.display='none';
-        $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
-        alert(s.error||'Scan session lost. Please run a new scan.');
-      }
-      return;
-    }
-    pollErrors=0;
-    $('pArc').style.strokeDashoffset=326.7*(1-(s.progress||0)/100);
-    $('pPct').textContent=(s.progress||0)+'%';
-    $('pScan').textContent=s.currentScanner||'Finishing…';
-    $('pCnt').textContent=(s.totalTests||0)+' tests';
-    q('#nT').textContent=s.totalTests||0;
-    q('#nP').textContent=s.totalPassed||0;
-    q('#nF').textContent=s.totalFailed||0;
-    q('#nW').textContent=s.totalWarnings||0;
-
-    if(s.status==='completed'){clearInterval(poll);showResults(s);}
-  }catch(e){
-    pollErrors++;
-    if(pollErrors>=5){
-      clearInterval(poll);
-      $('prog').style.display='none';$('hero').style.display='block';
-      $('navStats').style.display='none';
-      $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
-      alert('Lost connection to the server. Please try again.');
-    }
-  }
-}
-
-
 function showResults(s){
   lastScan=s;
   $('prog').style.display='none';
@@ -158,6 +156,7 @@ function showResults(s){
     if(hasIssue)issueCards++;else passCards++;
   }
   const score=Math.max(0,Math.min(100,Math.round(100-cr*12-hi*5-me*2-lo*.5)));
+  s.score=score;
   const arc=$('arc'),circ=263.9;
   setTimeout(()=>{arc.style.transition='stroke-dashoffset 1s ease-out';arc.style.strokeDashoffset=circ-(score/100)*circ;},80);
   anim('sNum',score);
@@ -226,13 +225,14 @@ function filter(f,btn){
 
 
 async function runAi(){
-  if(!scanId)return;
+  if(!lastScan)return;
   try{
-    const r=await fetch(`${API}/api/ai-analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({scanId})});
+    const r=await fetch(`${API}/api/ai-analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:lastScan.target,results:lastScan.results})});
     const d=await r.json();
     const md=d.success?d.analysis:(d.fallbackAnalysis||d.error||'Analysis not available');
     $('aiMd').innerHTML=renderMd(md);
     $('aiBox').style.display='block';
+    if(d.success&&d.analysis)lastScan.aiAnalysis={analysis:d.analysis};
   }catch(e){}
 }
 function renderMd(text){
@@ -248,26 +248,34 @@ function renderMd(text){
 
 
 function exportPdf(){
-  if(!scanId){alert('No scan data available. Please run a scan first.');return;}
+  if(!lastScan){alert('No scan data available. Please run a scan first.');return;}
   const btn=document.querySelector('.action-btn.primary');
   const orig=btn.innerHTML;
   btn.innerHTML='⏳ Generating...';btn.disabled=true;
 
-  fetch(`${API}/api/scan/${scanId}`)
+  fetch(`${API}/api/export-pdf`,{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(lastScan)
+  })
     .then(r=>{
-      if(!r.ok) throw new Error('Scan not found. The server may have restarted — please run a new scan.');
-      return r.json();
+      if(!r.ok) throw new Error('PDF generation failed. Please try again.');
+      return r.blob();
     })
-    .then(scan=>{
-      if(scan.status!=='completed') throw new Error('Scan is still running. Please wait for it to complete.');
-
-      const fname='Synthrex-Report-'+new Date().toISOString().slice(0,10)+'.pdf';
-      window.location.href = `${API}/api/export-pdf/${scanId}/${fname}`;
-      setTimeout(()=>{ btn.innerHTML=orig;btn.disabled=false; }, 3000);
+    .then(blob=>{
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      a.href=url;
+      a.download=`Synthrex-Report-${new Date().toISOString().slice(0,10)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     })
     .catch(e=>{
-
       alert(e.message);
+    })
+    .finally(()=>{
       btn.innerHTML=orig;btn.disabled=false;
     });
 }

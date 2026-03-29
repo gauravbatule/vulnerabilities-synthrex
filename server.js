@@ -51,7 +51,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '5mb' }));
 
 // ── Hide server identity ──
 app.disable('x-powered-by');
@@ -325,25 +325,71 @@ async function runScan(scanId, targetUrl) {
   console.log(`[${scanId.substring(0,8)}] Scan completed. Score: ${scan.score}. Total: ${scan.totalTests} tests, ${scan.totalFailed} fails, ${scan.totalWarnings} warns`);
 }
 
-// Get scan status
+// Get scan status (legacy, kept for backward compat)
 app.get('/api/scan/:id', (req, res) => {
   const scan = scans.get(req.params.id);
   if (!scan) return res.status(404).json({ error: 'Scan not found' });
   res.json(scan);
 });
 
-// AI Analysis
-app.post('/api/ai-analyze', async (req, res) => {
-  const { scanId } = req.body;
-  const scan = scans.get(scanId);
-  if (!scan) return res.status(404).json({ error: 'Scan not found' });
-  if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not yet completed' });
+// ── Run a single scanner (stateless, used by client-side orchestration) ──
+app.post('/api/run-scanner', async (req, res) => {
+  const { target, scannerId } = req.body;
+  if (!target || !scannerId) return res.status(400).json({ error: 'Missing target or scannerId' });
+
+  const targetUrl = normalizeUrl(target);
+  const scannerDef = SCANNERS.find(s => s.id === scannerId);
+  if (!scannerDef) return res.status(404).json({ error: 'Unknown scanner: ' + scannerId });
 
   try {
-    console.log(`[${scanId.substring(0,8)}] Starting AI analysis...`);
-    const analysis = await groqAnalyzer.analyze(scan.results, scan.target);
-    scan.aiAnalysis = analysis;
-    console.log(`[${scanId.substring(0,8)}] AI analysis completed`);
+    console.log(`[scanner] Running ${scannerDef.name} on ${targetUrl}...`);
+    let result = await withTimeout(scannerDef.scanner.scan(targetUrl), 55000, scannerDef.name);
+
+    // Defensive: ensure result is a proper object
+    if (!result || typeof result !== 'object') {
+      result = { scanner: scannerDef.name, icon: scannerDef.icon, results: { tests: [] }, testCount: 0 };
+    }
+    if (!result.scanner) result.scanner = scannerDef.name;
+    if (!result.icon) result.icon = scannerDef.icon;
+
+    const tests = result.results?.tests || [];
+    console.log(`[scanner] ${scannerDef.name}: ${tests.length} tests (${tests.filter(t => t.status === 'fail').length} fails)`);
+    res.json(result);
+  } catch (err) {
+    console.error(`[scanner] ${scannerDef.name} error:`, err.message);
+    res.json({
+      scanner: scannerDef.name, icon: scannerDef.icon,
+      results: { error: err.message, tests: [] },
+      testCount: 0
+    });
+  }
+});
+
+// AI Analysis (supports both legacy scanId and direct results)
+app.post('/api/ai-analyze', async (req, res) => {
+  const { scanId, target, results } = req.body;
+
+  let scanResults, scanTarget;
+
+  if (results && target) {
+    // New: results passed directly from client
+    scanResults = results;
+    scanTarget = normalizeUrl(target);
+  } else if (scanId) {
+    // Legacy: read from in-memory store
+    const scan = scans.get(scanId);
+    if (!scan) return res.status(404).json({ error: 'Scan not found' });
+    if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not yet completed' });
+    scanResults = scan.results;
+    scanTarget = scan.target;
+  } else {
+    return res.status(400).json({ error: 'Missing scan data' });
+  }
+
+  try {
+    console.log(`[AI] Starting analysis for ${scanTarget}...`);
+    const analysis = await groqAnalyzer.analyze(scanResults, scanTarget);
+    console.log(`[AI] Analysis completed for ${scanTarget}`);
     res.json(analysis);
   } catch (err) {
     console.error('AI analysis error:', err.message);
@@ -363,16 +409,15 @@ app.get('/export-pdf', (req, res) => {
   `);
 });
 
-app.get('/api/export-pdf/:scanId/:filename?', (req, res) => {
-  const scanId = req.params.scanId;
-  const scan = scans.get(scanId);
-  if (!scan) {
-    console.error(`[PDF] Export failed: Scan ${scanId} not found`);
-    return res.status(404).json({ error: 'Scan not found' });
+// ── PDF Export (stateless, accepts results in POST body) ──
+app.post('/api/export-pdf', (req, res) => {
+  const scan = req.body;
+  if (!scan || !scan.results || !scan.results.length) {
+    return res.status(400).json({ error: 'No scan data provided' });
   }
-  if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not completed' });
 
-  console.log(`[PDF] Generating report for ${scan.target} (ID: ${scanId.substring(0,8)})`);
+  console.log(`[PDF] Generating report for ${scan.target || 'unknown'}...`);
+
 
   const filename = `Synthrex-Report-${new Date().toISOString().slice(0, 10)}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
@@ -632,7 +677,15 @@ app.get('/api/export-pdf/:scanId/:filename?', (req, res) => {
 // Scanner list for UI
 app.get('/api/scanners', (req, res) => {
   res.json(SCANNERS.map(s => ({ id: s.id, name: s.name, icon: s.icon })));
+});
 
+// Legacy GET PDF export (backward compat)
+app.get('/api/export-pdf/:scanId/:filename?', (req, res) => {
+  const scanId = req.params.scanId;
+  const scan = scans.get(scanId);
+  if (!scan) return res.status(404).json({ error: 'Scan session expired. Please run a new scan and use the Export button.' });
+  if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not completed' });
+  res.redirect(307, `/api/export-pdf`);
 });
 
 // Only listen locally (Vercel uses module.exports)
