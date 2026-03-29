@@ -274,7 +274,15 @@ async function runScan(scanId, targetUrl) {
 
     try {
       console.log(`[${scanId.substring(0,8)}] Running: ${name}...`);
-      const result = await withTimeout(scanner.scan(targetUrl), 120000, name);
+      let result = await withTimeout(scanner.scan(targetUrl), 120000, name);
+
+      // Defensive: ensure result is a proper object
+      if (!result || typeof result !== 'object') {
+        result = { scanner: name, icon, results: { tests: [] }, testCount: 0 };
+      }
+      if (!result.scanner) result.scanner = name;
+      if (!result.icon) result.icon = icon;
+
       scan.results.push(result);
 
       // Count test results

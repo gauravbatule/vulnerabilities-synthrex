@@ -48,6 +48,7 @@ async function startScan(overrideCode){
     const d=await r.json();
     if(d.error){alert(d.error);btn.disabled=false;btn.innerHTML='🔍 Scan';return;}
     scanId=d.scanId;
+    pollErrors=0;
     hideCodeModal();
     $('hero').style.display='none';
     $('prog').style.display='block';
@@ -88,22 +89,55 @@ function submitCode(){
 }
 
 
+let pollErrors=0;
 async function pollStatus(){
   if(!scanId)return;
   try{
     const r=await fetch(`${API}/api/scan/${scanId}`);
+    if(!r.ok){
+      pollErrors++;
+      if(pollErrors>=3){
+        clearInterval(poll);
+        $('prog').style.display='none';$('hero').style.display='block';
+        $('navStats').style.display='none';
+        $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
+        alert('Scan session lost. The server may have restarted — please run a new scan.');
+      }
+      return;
+    }
     const s=await r.json();
-    $('pArc').style.strokeDashoffset=326.7*(1-s.progress/100);
-    $('pPct').textContent=s.progress+'%';
+    if(s.error||s.progress===undefined){
+      pollErrors++;
+      if(pollErrors>=3){
+        clearInterval(poll);
+        $('prog').style.display='none';$('hero').style.display='block';
+        $('navStats').style.display='none';
+        $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
+        alert(s.error||'Scan session lost. Please run a new scan.');
+      }
+      return;
+    }
+    pollErrors=0;
+    $('pArc').style.strokeDashoffset=326.7*(1-(s.progress||0)/100);
+    $('pPct').textContent=(s.progress||0)+'%';
     $('pScan').textContent=s.currentScanner||'Finishing…';
-    $('pCnt').textContent=s.totalTests+' tests';
-    q('#nT').textContent=s.totalTests;
-    q('#nP').textContent=s.totalPassed;
-    q('#nF').textContent=s.totalFailed;
-    q('#nW').textContent=s.totalWarnings;
+    $('pCnt').textContent=(s.totalTests||0)+' tests';
+    q('#nT').textContent=s.totalTests||0;
+    q('#nP').textContent=s.totalPassed||0;
+    q('#nF').textContent=s.totalFailed||0;
+    q('#nW').textContent=s.totalWarnings||0;
 
     if(s.status==='completed'){clearInterval(poll);showResults(s);}
-  }catch(e){}
+  }catch(e){
+    pollErrors++;
+    if(pollErrors>=5){
+      clearInterval(poll);
+      $('prog').style.display='none';$('hero').style.display='block';
+      $('navStats').style.display='none';
+      $('btn').disabled=false;$('btn').innerHTML='🔍 Scan';
+      alert('Lost connection to the server. Please try again.');
+    }
+  }
 }
 
 
@@ -113,6 +147,7 @@ function showResults(s){
   $('results').style.display='block';
   let cr=0,hi=0,me=0,lo=0,inf=0,issueCards=0,passCards=0;
   for(const r of s.results){
+    if(!r)continue;
     const tests=r.results?.tests||[];let hasIssue=false;
     for(const t of tests){
       if(t.status==='fail'||t.status==='warn'){
@@ -140,6 +175,7 @@ function anim(id,t){const e=$(id);let c=0;const s=Math.max(1,Math.floor(t/20));c
 function renderList(results){
   const g=$('rlist');g.innerHTML='';
   for(const r of results){
+    if(!r||!r.scanner)continue;
     const tests=r.results?.tests||[];
     const fails=tests.filter(t=>t.status==='fail');
     const warns=tests.filter(t=>t.status==='warn');
@@ -151,7 +187,7 @@ function renderList(results){
     else{bt=passes.length+' passed';}
     const d=document.createElement('div');
     d.className='sc';d.dataset.type=bc;
-    d.innerHTML=`<div class="sc-h" onclick="tog(this)"><span class="ic">${r.icon||'🔍'}</span><h4>${esc(r.scanner)}</h4><span class="badge ${bc}">${bt}</span><span class="chevron">▶</span></div><div class="sc-b">${renderTests(tests)}</div>`;
+    d.innerHTML=`<div class="sc-h" onclick="tog(this)"><span class="ic">${r.icon||'🔍'}</span><h4>${esc(r.scanner||'Unknown Scanner')}</h4><span class="badge ${bc}">${bt}</span><span class="chevron">▶</span></div><div class="sc-b">${renderTests(tests)}</div>`;
     g.appendChild(d);
   }
   g.querySelectorAll('.badge.fail').forEach(b=>{
