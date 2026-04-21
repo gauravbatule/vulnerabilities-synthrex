@@ -6,18 +6,42 @@ const DANGEROUS_METHODS = ['TRACE','CONNECT','DELETE','PUT','PROPFIND','PROPPATC
 async function scan(targetUrl) {
   const results = { allowed: [], blocked: [], tests: [] };
   try {
+    // Get baseline GET response to compare against (CDNs return same page for all methods)
+    let baselineBody = '', baselineLength = 0;
+    try {
+      const baseline = await axios({ method: 'GET', url: targetUrl, timeout: 5000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } });
+      baselineBody = typeof baseline.data === 'string' ? baseline.data : '';
+      baselineLength = baselineBody.length;
+    } catch { /* skip baseline */ }
+
     for (const method of HTTP_METHODS) {
       try {
         const response = await axios({ method: method === 'CONNECT' ? 'OPTIONS' : method, url: targetUrl, timeout: 5000, validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36' } });
         const isDangerous = DANGEROUS_METHODS.includes(method);
-        const isAllowed = response.status < 400 && response.status !== 405;
-        if (isAllowed) {
-          results.allowed.push({ method, status: response.status });
-          results.tests.push({ id: `http-${method}`, name: `${method} method allowed (${response.status})`, status: isDangerous ? 'fail' : 'info', severity: isDangerous ? 'high' : 'info' });
-        } else {
-          results.blocked.push({ method, status: response.status });
-          results.tests.push({ id: `http-${method}`, name: `${method} method blocked (${response.status})`, status: 'pass', severity: 'info' });
+        const status = response.status;
+        const isBlocked = status === 405 || status === 501 || status >= 400;
+        const isTrulyAllowed = status >= 200 && status < 300;
+
+        if (isTrulyAllowed && isDangerous) {
+          // CDN check: if response body matches GET baseline, the server is just serving the same page
+          const body = typeof response.data === 'string' ? response.data : '';
+          const isCdnIdentical = baselineLength > 0 && Math.abs(body.length - baselineLength) < 200;
+
+          if (isCdnIdentical) {
+            // CDN is just returning the same page — not a real vulnerability
+            results.tests.push({ id: `http-${method}`, name: `${method} returns same page as GET (CDN/proxy)`, status: 'info', severity: 'info' });
+          } else {
+            results.allowed.push({ method, status });
+            results.tests.push({ id: `http-${method}`, name: `${method} method allowed (${status})`, status: 'fail', severity: 'high' });
+          }
+        } else if (isTrulyAllowed && !isDangerous) {
+          results.allowed.push({ method, status });
+          results.tests.push({ id: `http-${method}`, name: `${method} method allowed (${status})`, status: 'pass', severity: 'info' });
+        } else if (isBlocked) {
+          results.blocked.push({ method, status });
+          results.tests.push({ id: `http-${method}`, name: `${method} method blocked (${status})`, status: 'pass', severity: 'info' });
         }
+        // Skip redirects — they don't confirm method support
       } catch {
         results.tests.push({ id: `http-${method}`, name: `${method} method blocked/error`, status: 'pass', severity: 'info' });
       }

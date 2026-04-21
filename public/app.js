@@ -8,12 +8,17 @@ function normalizeTarget(t){
 }
 
 let pendingTarget=null;
+let authorizedTarget=null; // Track which target passed precheck/code auth
+
+function $(id){return document.getElementById(id);}
+function q(sel){return document.querySelector(sel);}
+function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 
 function showLoader(){const l=$('precheckLoader');if(l)l.classList.add('visible');}
 function hideLoader(){const l=$('precheckLoader');if(l)l.classList.remove('visible');}
 
 async function startScan(overrideCode){
-  const raw=overrideCode?pendingTarget:document.getElementById('inp').value.trim();
+  const raw=overrideCode?pendingTarget:$('inp').value.trim();
   if(!raw){alert('Enter a domain');return;}
   const btn=$('btn');btn.disabled=true;btn.innerHTML='Checking…';
   try{
@@ -36,7 +41,13 @@ async function startScan(overrideCode){
         btn.disabled=false;btn.innerHTML='🔍 Scan';return;
       }
 
+      // Precheck passed (security.txt found)
+      authorizedTarget=raw;
       hideLoader();
+    } else {
+      // Access code provided — validate it via a scan attempt
+      // The code is passed to the server for validation
+      authorizedTarget=pendingTarget;
     }
 
     hideCodeModal();
@@ -87,16 +98,64 @@ async function startScan(overrideCode){
       }
 
       // Update nav stats live
-      q('#nT').textContent=totalTests;
-      q('#nP').textContent=totalPassed;
-      q('#nF').textContent=totalFailed;
-      q('#nW').textContent=totalWarnings;
+      $('nT').textContent=totalTests;
+      $('nP').textContent=totalPassed;
+      $('nF').textContent=totalFailed;
+      $('nW').textContent=totalWarnings;
     }
 
     // Mark 100%
     $('pArc').style.strokeDashoffset=0;
     $('pPct').textContent='100%';
     $('pScan').textContent='Complete';
+
+    // Phase 2: Subdomain scanning (if enabled)
+    const scanSubsChecked = $('scanSubdomains')?.checked;
+    if(scanSubsChecked){
+      // Collect discovered subdomains from scan results
+      const discoveredSubs = [];
+      for(const r of allResults){
+        if(r.results?.found){
+          for(const f of r.results.found){
+            if(f.subdomain) discoveredSubs.push(f.subdomain);
+          }
+        }
+      }
+
+      if(discoveredSubs.length > 0){
+        $('pPct').textContent='⚡';
+        $('pScan').textContent=`Scanning ${discoveredSubs.length} subdomains...`;
+        $('pCnt').textContent='Quick security checks';
+
+        // Limit to 10 subdomains to avoid excessive time
+        const subsToScan = discoveredSubs.slice(0, 10);
+        for(let i=0; i<subsToScan.length; i++){
+          const sub = subsToScan[i];
+          $('pScan').textContent=`Subdomain ${i+1}/${subsToScan.length}: ${sub}`;
+          try{
+            const r = await fetch(`${API}/api/scan-subdomain`,{
+              method:'POST',
+              headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({subdomain:sub})
+            });
+            const result = await r.json();
+            if(result && result.results?.tests?.length > 0){
+              allResults.push(result);
+              const tests = result.results.tests;
+              totalTests += tests.length;
+              totalPassed += tests.filter(t=>t.status==='pass').length;
+              totalFailed += tests.filter(t=>t.status==='fail').length;
+              totalWarnings += tests.filter(t=>t.status==='warn').length;
+              $('nT').textContent=totalTests;
+              $('nP').textContent=totalPassed;
+              $('nF').textContent=totalFailed;
+              $('nW').textContent=totalWarnings;
+            }
+          }catch(e){ /* skip failed subdomain */ }
+        }
+        $('pScan').textContent='Complete';
+      }
+    }
 
     showResults({
       target:raw,
@@ -108,7 +167,7 @@ async function startScan(overrideCode){
   }catch(e){
     hideLoader();
     btn.disabled=false;btn.innerHTML='🔍 Scan';
-    alert('Cannot reach server.');
+    alert('Cannot reach server. Please try again.');
   }
 }
 
@@ -127,15 +186,54 @@ function showCodeModal(){
       </div>
     </div></div>`;
     document.body.appendChild(m);
+    // Submit on Enter key
+    m.querySelector('#codeInp').addEventListener('keydown', e => {
+      if(e.key==='Enter'){e.preventDefault();submitCode();}
+    });
   }
   m.style.display='flex';
   setTimeout(()=>{const i=$('codeInp');if(i)i.focus();},100);
 }
 function hideCodeModal(){const m=$('codeModal');if(m)m.style.display='none';}
-function submitCode(){
+async function submitCode(){
   const code=$('codeInp')?.value.trim();
   if(!code){alert('Please enter an access code.');return;}
-  startScan(code);
+
+  // Verify code against server
+  const verifyBtn=document.querySelector('.btn-primary');
+  if(verifyBtn){verifyBtn.disabled=true;verifyBtn.textContent='Verifying…';}
+
+  try{
+    const r=await fetch(`${API}/api/verify-code`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code})
+    });
+    const d=await r.json();
+    if(d.valid){
+      // Code verified — proceed with scan
+      hideCodeModal();
+      authorizedTarget=pendingTarget;
+      startScan(code);
+    }else{
+      alert(d.error||'Invalid access code. Please try again.');
+      if(verifyBtn){verifyBtn.disabled=false;verifyBtn.textContent='Verify & Scan';}
+    }
+  }catch(e){
+    alert('Could not verify code. Server may be unreachable.');
+    if(verifyBtn){verifyBtn.disabled=false;verifyBtn.textContent='Verify & Scan';}
+  }
+}
+
+function newScan(){
+  lastScan=null;allOpen=false;authorizedTarget=null;
+  $('results').style.display='none';
+  $('prog').style.display='none';
+  $('hero').style.display='';
+  $('navStats').style.display='none';
+  $('nT').textContent='0';$('nP').textContent='0';$('nF').textContent='0';$('nW').textContent='0';
+  const btn=$('btn');btn.disabled=false;btn.innerHTML='🔍 Scan';
+  $('inp').value='';$('inp').focus();
 }
 
 
@@ -144,20 +242,36 @@ function showResults(s){
   $('prog').style.display='none';
   $('results').style.display='block';
   let cr=0,hi=0,me=0,lo=0,inf=0,issueCards=0,passCards=0;
+  let scannerScores=[];
   for(const r of s.results){
     if(!r)continue;
     const tests=r.results?.tests||[];let hasIssue=false;
+    let sFails=0,sTotal=tests.length;
     for(const t of tests){
       if(t.status==='fail'||t.status==='warn'){
         const v=t.severity;if(v==='critical')cr++;else if(v==='high')hi++;else if(v==='medium')me++;else if(v==='low')lo++;else inf++;
         hasIssue=true;
+        // Weight failures by severity within each scanner
+        if(t.status==='fail') sFails+=(v==='critical'?3:v==='high'?2:1);
+        else sFails+=0.5; // warnings count less
       }
     }
     if(hasIssue)issueCards++;else passCards++;
+    // Each scanner gets 0-100 score (equal weight)
+    if(sTotal>0){
+      const scannerScore=Math.max(0,100-((sFails/Math.max(1,sTotal))*100));
+      scannerScores.push(scannerScore);
+    }else{
+      scannerScores.push(100); // no tests = no issues
+    }
   }
-  const score=Math.max(0,Math.min(100,Math.round(100-cr*12-hi*5-me*2-lo*.5)));
+  // Final score: average across all scanners (equal weight per scanner)
+  const score=scannerScores.length>0?Math.round(scannerScores.reduce((a,b)=>a+b,0)/scannerScores.length):100;
   s.score=score;
   const arc=$('arc'),circ=263.9;
+  // Set arc color to match score
+  const scoreColor = score>=75?'#10b981':score>=40?'#f59e0b':'#ef4444';
+  arc.setAttribute('stroke', scoreColor);
   setTimeout(()=>{arc.style.transition='stroke-dashoffset 1s ease-out';arc.style.strokeDashoffset=circ-(score/100)*circ;},80);
   anim('sNum',score);
   const sn=$('sNum');
@@ -226,14 +340,20 @@ function filter(f,btn){
 
 async function runAi(){
   if(!lastScan)return;
+  const aiBox=$('aiBox');
+  const aiMd=$('aiMd');
+  // Show loading state
+  aiBox.style.display='block';
+  aiMd.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center;">⏳ AI analysis in progress... This may take 30-60 seconds.</div>';
   try{
-    const r=await fetch(`${API}/api/ai-analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:lastScan.target,results:lastScan.results})});
+    const r=await fetch(`${API}/api/ai-analyze`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target:lastScan.target,results:lastScan.results,score:lastScan.score})});
     const d=await r.json();
     const md=d.success?d.analysis:(d.fallbackAnalysis||d.error||'Analysis not available');
-    $('aiMd').innerHTML=renderMd(md);
-    $('aiBox').style.display='block';
+    aiMd.innerHTML=renderMd(md);
     if(d.success&&d.analysis)lastScan.aiAnalysis={analysis:d.analysis};
-  }catch(e){}
+  }catch(e){
+    aiMd.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center;">AI analysis unavailable. You can still view all scanner results above.</div>';
+  }
 }
 function renderMd(text){
   if(!text)return '';
@@ -280,9 +400,6 @@ function exportPdf(){
     });
 }
 
-function $(id){return document.getElementById(id);}
-function q(sel){return document.querySelector(sel);}
-function esc(t){const d=document.createElement('div');d.textContent=t;return d.innerHTML;}
 document.addEventListener('DOMContentLoaded',()=>{
   $('inp').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();startScan();}});
 });

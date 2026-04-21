@@ -58,9 +58,8 @@ async function scan(targetUrl) {
       if (sig.pattern.test(headerVal) || sig.pattern.test(Object.keys(headers).join(' '))) {
         results.detected.push({ name: sig.name, source: 'headers', header: sig.header });
         results.tests.push({ id: `waf-header-${sig.name.replace(/\s/g,'-')}`, name: `WAF detected: ${sig.name}`, status: 'info', severity: 'info' });
-      } else {
-        results.tests.push({ id: `waf-header-${sig.name.replace(/\s/g,'-')}`, name: `WAF check: ${sig.name}`, status: 'pass', severity: 'info' });
       }
+      // Don't report non-detections
     }
 
     // Check body for WAF patterns

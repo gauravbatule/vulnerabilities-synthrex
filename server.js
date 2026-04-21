@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('events').EventEmitter.defaultMaxListeners = 50;
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -49,6 +50,7 @@ const PDFDocument = require('pdfkit');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const ACCESS_CODE = process.env.ACCESS_CODE || '9921';
 
 app.use(cors());
 app.use(express.json({ limit: '5mb' }));
@@ -66,8 +68,19 @@ app.use((req, res, next) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-// In-memory scan storage
+// In-memory scan storage with TTL eviction
 const scans = new Map();
+const SCAN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const MAX_SCANS = 100;
+
+// Evict stale scans periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, scan] of scans) {
+    const started = new Date(scan.startedAt).getTime();
+    if (now - started > SCAN_TTL_MS) scans.delete(id);
+  }
+}, 5 * 60 * 1000); // Check every 5 minutes
 
 // All available scanners in execution order
 const SCANNERS = [
@@ -187,24 +200,39 @@ async function hasSecurityTxt(targetUrl) {
 
 // ── Pre-check endpoint (frontend calls this first) ──
 app.post('/api/precheck', async (req, res) => {
-  const { target } = req.body;
-  if (!target) return res.status(400).json({ error: 'Target URL is required' });
-  const targetUrl = normalizeUrl(target);
+  try {
+    const { target } = req.body;
+    if (!target) return res.status(400).json({ error: 'Target URL is required' });
+    const targetUrl = normalizeUrl(target);
 
-  // Validate domain exists
-  const validation = await validateDomain(targetUrl);
-  if (!validation.valid) {
-    return res.json({ allowed: false, reason: 'invalid_domain', error: validation.error });
+    // Validate domain exists
+    const validation = await validateDomain(targetUrl);
+    if (!validation.valid) {
+      return res.json({ allowed: false, reason: 'invalid_domain', error: validation.error });
+    }
+
+    // Check for security.txt
+    const hasSec = await hasSecurityTxt(targetUrl);
+    if (hasSec) {
+      return res.json({ allowed: true, method: 'security_txt' });
+    }
+
+    // No security.txt → require access code
+    return res.json({ allowed: false, reason: 'no_security_txt', requireCode: true });
+  } catch (err) {
+    console.error('[precheck] Error:', err.message);
+    return res.status(500).json({ error: 'Precheck failed: ' + err.message });
   }
+});
 
-  // Check for security.txt
-  const hasSec = await hasSecurityTxt(targetUrl);
-  if (hasSec) {
-    return res.json({ allowed: true, method: 'security_txt' });
+// ── Verify access code endpoint ──
+app.post('/api/verify-code', (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ valid: false, error: 'No code provided' });
+  if (code === ACCESS_CODE) {
+    return res.json({ valid: true });
   }
-
-  // No security.txt → require access code
-  return res.json({ allowed: false, reason: 'no_security_txt', requireCode: true });
+  return res.status(403).json({ valid: false, error: 'Invalid access code' });
 });
 
 // Start a scan
@@ -224,12 +252,19 @@ app.post('/api/scan', async (req, res) => {
   // Skip if precheck already approved (avoids race conditions with security.txt)
   if (!precheckPassed) {
     const hasSec = await hasSecurityTxt(targetUrl);
-    if (!hasSec && accessCode !== '9921') {
+    if (!hasSec && accessCode !== ACCESS_CODE) {
       return res.status(403).json({ error: 'Authorization required. Please provide a valid access code.' });
     }
   }
 
   const scanId = uuidv4();
+
+  // Enforce max scan limit to prevent memory exhaustion
+  if (scans.size >= MAX_SCANS) {
+    // Evict oldest scan
+    const oldest = scans.keys().next().value;
+    if (oldest) scans.delete(oldest);
+  }
 
   const scan = {
     id: scanId,
@@ -308,19 +343,23 @@ async function runScan(scanId, targetUrl) {
   scan.currentScanner = '';
   scan.completedAt = new Date().toISOString();
 
-  // Compute security score (same logic as client)
+  // Compute security score — per-scanner equal weighting (matches client)
   let cr=0,hi=0,me=0,lo=0;
+  const scannerScores = [];
   for(const r of scan.results){
-    for(const t of (r.results?.tests||[])){
-      if(t.status!=='fail'&&t.status!=='warn') continue;
-      if(t.severity==='critical') cr++;
-      else if(t.severity==='high') hi++;
-      else if(t.severity==='medium') me++;
-      else lo++;
+    const tests = r.results?.tests || [];
+    let sFails = 0, sTotal = tests.length;
+    for(const t of tests){
+      if(t.status !== 'fail' && t.status !== 'warn') continue;
+      if(t.severity === 'critical') { cr++; if(t.status==='fail') sFails+=3; else sFails+=0.5; }
+      else if(t.severity === 'high') { hi++; if(t.status==='fail') sFails+=2; else sFails+=0.5; }
+      else if(t.severity === 'medium') { me++; if(t.status==='fail') sFails+=1; else sFails+=0.5; }
+      else { lo++; sFails += 0.5; }
     }
+    if(sTotal > 0) scannerScores.push(Math.max(0, 100 - ((sFails / Math.max(1, sTotal)) * 100)));
+    else scannerScores.push(100);
   }
-  const penalty = cr*15 + hi*7 + me*3 + lo*1;
-  scan.score = Math.max(0, Math.min(100, 100 - penalty));
+  scan.score = scannerScores.length > 0 ? Math.round(scannerScores.reduce((a,b) => a+b, 0) / scannerScores.length) : 100;
 
   console.log(`[${scanId.substring(0,8)}] Scan completed. Score: ${scan.score}. Total: ${scan.totalTests} tests, ${scan.totalFailed} fails, ${scan.totalWarnings} warns`);
 }
@@ -334,14 +373,18 @@ app.get('/api/scan/:id', (req, res) => {
 
 // ── Run a single scanner (stateless, used by client-side orchestration) ──
 app.post('/api/run-scanner', async (req, res) => {
-  const { target, scannerId } = req.body;
-  if (!target || !scannerId) return res.status(400).json({ error: 'Missing target or scannerId' });
-
-  const targetUrl = normalizeUrl(target);
-  const scannerDef = SCANNERS.find(s => s.id === scannerId);
-  if (!scannerDef) return res.status(404).json({ error: 'Unknown scanner: ' + scannerId });
-
   try {
+    const { target, scannerId } = req.body;
+    if (!target || !scannerId) return res.status(400).json({ error: 'Missing target or scannerId' });
+
+    const targetUrl = normalizeUrl(target);
+
+    // Validate the URL is parseable
+    try { new URL(targetUrl); } catch { return res.status(400).json({ error: 'Invalid target URL' }); }
+
+    const scannerDef = SCANNERS.find(s => s.id === scannerId);
+    if (!scannerDef) return res.status(404).json({ error: 'Unknown scanner: ' + scannerId });
+
     console.log(`[scanner] Running ${scannerDef.name} on ${targetUrl}...`);
     let result = await withTimeout(scannerDef.scanner.scan(targetUrl), 55000, scannerDef.name);
 
@@ -356,25 +399,75 @@ app.post('/api/run-scanner', async (req, res) => {
     console.log(`[scanner] ${scannerDef.name}: ${tests.length} tests (${tests.filter(t => t.status === 'fail').length} fails)`);
     res.json(result);
   } catch (err) {
-    console.error(`[scanner] ${scannerDef.name} error:`, err.message);
+    console.error(`[scanner] error:`, err.message);
     res.json({
-      scanner: scannerDef.name, icon: scannerDef.icon,
+      scanner: req.body?.scannerId || 'unknown', icon: '🔍',
       results: { error: err.message, tests: [] },
       testCount: 0
     });
   }
 });
 
+// ── Quick subdomain scan (headers + SSL + cookies on a single subdomain) ──
+const SUBDOMAIN_SCANNERS = [
+  { id: 'headers', scanner: headerScanner, name: 'Security Headers', icon: '🛡️' },
+  { id: 'ssl', scanner: sslScanner, name: 'SSL/TLS', icon: '🔒' },
+  { id: 'cookies', scanner: cookieScanner, name: 'Cookie Security', icon: '🍪' },
+  { id: 'clickjack', scanner: clickjackScanner, name: 'Clickjacking', icon: '🖼️' },
+];
+
+app.post('/api/scan-subdomain', async (req, res) => {
+  try {
+    const { subdomain } = req.body;
+    if (!subdomain) return res.status(400).json({ error: 'Missing subdomain' });
+
+    const targetUrl = `https://${subdomain}`;
+    console.log(`[subdomain-scan] Scanning ${targetUrl}...`);
+
+    const results = [];
+    for (const sc of SUBDOMAIN_SCANNERS) {
+      try {
+        let result = await withTimeout(sc.scanner.scan(targetUrl), 15000, sc.name);
+        if (!result || typeof result !== 'object') result = { scanner: sc.name, icon: sc.icon, results: { tests: [] }, testCount: 0 };
+        if (!result.scanner) result.scanner = sc.name;
+        if (!result.icon) result.icon = sc.icon;
+        results.push(result);
+      } catch (err) {
+        results.push({ scanner: sc.name, icon: sc.icon, results: { error: err.message, tests: [] }, testCount: 0 });
+      }
+    }
+
+    // Flatten all tests into a single result for this subdomain
+    const allTests = [];
+    for (const r of results) {
+      for (const t of (r.results?.tests || [])) {
+        allTests.push({ ...t, name: `[${subdomain}] ${t.name}` });
+      }
+    }
+
+    res.json({
+      scanner: `Subdomain: ${subdomain}`,
+      icon: '🌐',
+      results: { tests: allTests },
+      testCount: allTests.length
+    });
+  } catch (err) {
+    console.error(`[subdomain-scan] error:`, err.message);
+    res.json({ scanner: 'Subdomain Scan', icon: '🌐', results: { error: err.message, tests: [] }, testCount: 0 });
+  }
+});
+
 // AI Analysis (supports both legacy scanId and direct results)
 app.post('/api/ai-analyze', async (req, res) => {
-  const { scanId, target, results } = req.body;
+  const { scanId, target, results, score } = req.body;
 
-  let scanResults, scanTarget;
+  let scanResults, scanTarget, computedScore;
 
   if (results && target) {
     // New: results passed directly from client
     scanResults = results;
     scanTarget = normalizeUrl(target);
+    computedScore = score;
   } else if (scanId) {
     // Legacy: read from in-memory store
     const scan = scans.get(scanId);
@@ -382,13 +475,14 @@ app.post('/api/ai-analyze', async (req, res) => {
     if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not yet completed' });
     scanResults = scan.results;
     scanTarget = scan.target;
+    computedScore = scan.score;
   } else {
     return res.status(400).json({ error: 'Missing scan data' });
   }
 
   try {
     console.log(`[AI] Starting analysis for ${scanTarget}...`);
-    const analysis = await groqAnalyzer.analyze(scanResults, scanTarget);
+    const analysis = await groqAnalyzer.analyze(scanResults, scanTarget, computedScore);
     console.log(`[AI] Analysis completed for ${scanTarget}`);
     res.json(analysis);
   } catch (err) {
@@ -681,11 +775,15 @@ app.get('/api/scanners', (req, res) => {
 
 // Legacy GET PDF export (backward compat)
 app.get('/api/export-pdf/:scanId/:filename?', (req, res) => {
-  const scanId = req.params.scanId;
-  const scan = scans.get(scanId);
-  if (!scan) return res.status(404).json({ error: 'Scan session expired. Please run a new scan and use the Export button.' });
-  if (scan.status !== 'completed') return res.status(400).json({ error: 'Scan not completed' });
-  res.redirect(307, `/api/export-pdf`);
+  res.status(410).json({ error: 'This PDF export link is outdated. Please run a new scan and use the Export PDF button on the results page.' });
+});
+
+// Global error handlers to prevent server crashes
+process.on('unhandledRejection', (reason) => {
+  console.error('[FATAL] Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] Uncaught exception:', err.message);
 });
 
 // Only listen locally (Vercel uses module.exports)
@@ -698,7 +796,7 @@ if (!process.env.VERCEL) {
 ║   ──────────────────────────────────────                 ║
 ║   Server running at http://localhost:${PORT}               ║
 ║                                                          ║
-║   18 Scanner Modules | 1500+ Security Tests              ║
+║   ${SCANNERS.length} Scanner Modules | 1800+ Security Tests              ║
 ║   AI-Powered Analysis via Groq API                       ║
 ║   Built by Gaurav Batule                                 ║
 ║                                                          ║
