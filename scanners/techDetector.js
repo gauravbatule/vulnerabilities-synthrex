@@ -99,8 +99,8 @@ async function scan(targetUrl) {
       if (found && !detected.has(tech.name)) {
         detected.add(tech.name);
         results.technologies.push({ ...tech, source: 'server-header', value: headers['server'] });
+        results.tests.push({ id: `tech-server-${key}`, name: `Server: ${tech.name}`, status: 'info', severity: 'info' });
       }
-      results.tests.push({ id: `tech-server-${key}`, name: `Server: ${tech.name}`, status: found ? 'info' : 'pass', severity: 'info' });
     }
 
     // X-Powered-By
@@ -110,8 +110,8 @@ async function scan(targetUrl) {
       if (found && !detected.has(tech.name)) {
         detected.add(tech.name);
         results.technologies.push({ ...tech, source: 'x-powered-by', value: headers['x-powered-by'] });
+        results.tests.push({ id: `tech-xpb-${key}`, name: `X-Powered-By: ${tech.name}`, status: 'warn', severity: 'medium' });
       }
-      results.tests.push({ id: `tech-xpb-${key}`, name: `X-Powered-By: ${tech.name}`, status: found ? 'info' : 'pass', severity: 'info' });
     }
 
     // HTML signatures
@@ -120,8 +120,8 @@ async function scan(targetUrl) {
       if (found && !detected.has(sig.name)) {
         detected.add(sig.name);
         results.technologies.push({ name: sig.name, category: sig.category, source: 'html-analysis' });
+        results.tests.push({ id: `tech-html-${sig.name.replace(/\s/g,'-')}`, name: `Detected: ${sig.name}`, status: 'info', severity: 'info' });
       }
-      results.tests.push({ id: `tech-html-${sig.name.replace(/\s/g,'-')}`, name: `Technology: ${sig.name}`, status: found ? 'info' : 'pass', severity: 'info' });
     }
 
     // Meta generator
@@ -131,6 +131,8 @@ async function scan(targetUrl) {
       results.technologies.push({ name: generator, category: 'generator', source: 'meta-tag' });
       results.tests.push({ id: 'tech-meta-generator', name: `Meta generator: ${generator}`, status: 'info', severity: 'info' });
     }
+    // Summary
+    results.tests.push({ id: 'tech-summary', name: `Tech detection: ${detected.size} technologies identified`, status: 'info', severity: 'info' });
 
   } catch (err) {
     results.error = `Tech detection failed: ${err.message}`;

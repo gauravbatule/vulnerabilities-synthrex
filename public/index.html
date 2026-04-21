@@ -67,6 +67,9 @@
           </button>
         </div>
         <p class="disclaimer">⚠ Only scan websites you own or have explicit authorization to test. <a href="/privacy.html">Terms apply</a>.</p>
+        <label class="scan-option" title="After the main scan, run quick security checks (Headers, SSL, Cookies) on each discovered subdomain">
+          <input type="checkbox" id="scanSubdomains"> <span>Also scan discovered subdomains</span>
+        </label>
       </div>
       <div class="module-tags">
         <span>Security Headers</span><span>SSL/TLS</span><span>WAF Detection</span><span>Technology Stack</span>
@@ -131,6 +134,10 @@
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5H15M3 9H15M3 13H15" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
             Toggle All Sections
           </button>
+          <button class="action-btn" onclick="newScan()">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3V15M3 9H15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            New Scan
+          </button>
         </div>
       </div>
 
@@ -141,7 +148,7 @@
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 2L2 6L10 10L18 6L10 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 14L10 18L18 14" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><path d="M2 10L10 14L18 10" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
             AI Security Assessment
           </div>
-          <span class="ai-badge">GPT-OSS-120B</span>
+          <span class="ai-badge">Llama-4 Maverick</span>
         </div>
         <article class="report" id="aiMd"></article>
       </div>
@@ -159,6 +166,13 @@
     </section>
   </div>
 
+  <footer>
+    <div class="footer-inner">
+      <span><strong>Synthrex</strong> — AI Security Scanner</span>
+      <span>Built by <a href="https://www.linkedin.com/in/gaurav-batule/" target="_blank" rel="noopener">Gaurav Batule</a> · <a href="/privacy.html">Terms & Privacy</a></span>
+    </div>
+  </footer>
+
 
   <div id="precheckLoader">
     <div class="loader-ring"></div>
@@ -166,6 +180,6 @@
     <div class="loader-sub">Checking security.txt &amp; domain validity</div>
   </div>
 
-  <script src="app.js?v=2.7"></script>
+  <script src="app.js?v=3.0"></script>
 </body>
 </html>

@@ -75,6 +75,7 @@ const SCANNER_TIMEOUT = 60000; // 60s hard cap for the whole subdomain scan
 async function scan(targetUrl) {
   const results = { found: [], tests: [] };
   const deadline = Date.now() + SCANNER_TIMEOUT;
+  let totalChecked = 0;
   try {
     const hostname = new URL(targetUrl).hostname.replace(/^www\./, '');
     const batchSize = 30;
@@ -83,6 +84,7 @@ async function scan(targetUrl) {
       const batch = SUBDOMAINS.slice(i, i + batchSize);
       const checks = batch.map(async (sub) => {
         const fqdn = `${sub}.${hostname}`;
+        totalChecked++;
         try {
           const addrs = await dnsLookupWithTimeout(fqdn, 3000);
           if (addrs && addrs.length > 0) {
@@ -91,16 +93,15 @@ async function scan(targetUrl) {
             if (['admin','test','staging','dev','debug','backup','internal','phpmyadmin','jenkins','git','gitlab'].includes(s)) severity = 'medium';
             if (['cpanel','whm','panel','ssh','vpn','bastion','vault','secrets'].includes(s)) severity = 'high';
             results.found.push({ subdomain: fqdn, ip: addrs[0], severity });
-            results.tests.push({ id: `sub-${sub}`, name: `${fqdn} (${addrs[0]})`, status: 'warn', severity });
-          } else {
-            results.tests.push({ id: `sub-${sub}`, name: `${fqdn} — not found`, status: 'pass', severity: 'info' });
+            results.tests.push({ id: `sub-${sub}`, name: `Found: ${fqdn} → ${addrs[0]}`, status: severity === 'info' ? 'warn' : 'fail', severity });
           }
-        } catch {
-          results.tests.push({ id: `sub-${sub}`, name: `${fqdn} — not found`, status: 'pass', severity: 'info' });
-        }
+        } catch { /* not resolved — skip silently */ }
       });
       await Promise.all(checks);
     }
+    // Summary test
+    const foundCount = results.found.length;
+    results.tests.push({ id: 'sub-summary', name: `Subdomain scan: ${foundCount} found out of ${totalChecked} checked`, status: foundCount > 5 ? 'warn' : 'pass', severity: foundCount > 5 ? 'medium' : 'info' });
   } catch (err) { results.error = err.message; }
   return { scanner: 'Subdomain Enumeration', icon: '🌍', results, testCount: results.tests.length };
 }

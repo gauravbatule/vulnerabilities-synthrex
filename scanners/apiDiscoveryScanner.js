@@ -69,14 +69,16 @@ async function scan(targetUrl) {
           results.tests.push({ id: `api-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `API endpoint: ${c.path} (${c.status}${c.isJson ? ', JSON' : ''})`, status: 'fail', severity });
         } else if (c.status === 401 || c.status === 403) {
           results.tests.push({ id: `api-auth-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `Auth-protected: ${c.path} (${c.status})`, status: 'info', severity: 'info' });
-        } else {
-          results.tests.push({ id: `api-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `Not found: ${c.path}`, status: 'pass', severity: 'info' });
         }
+        // Don't report 'not found' — it's noise
       }
     }
   } catch (err) {
     results.error = err.message;
   }
+  // Summary
+  const foundCount = results.endpoints.length;
+  results.tests.push({ id: 'api-summary', name: `API scan: ${foundCount} endpoints found out of ${API_PATHS.length} paths checked`, status: foundCount > 3 ? 'warn' : 'pass', severity: foundCount > 3 ? 'medium' : 'info' });
   return { scanner: 'API Endpoint Discovery', icon: '🔌', results, testCount: results.tests.length };
 }
 

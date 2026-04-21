@@ -296,6 +296,8 @@ const PATHS = [
 
 async function scan(targetUrl) {
   const results = { found: [], notFound: [], tests: [] };
+  const SCANNER_TIMEOUT = 50000;
+  const deadline = Date.now() + SCANNER_TIMEOUT;
   try {
     const baseUrl = targetUrl.replace(/\/$/, '');
 
@@ -315,6 +317,7 @@ async function scan(targetUrl) {
 
     const batchSize = 15;
     for (let i = 0; i < PATHS.length; i += batchSize) {
+      if (Date.now() > deadline) break;
       const batch = PATHS.slice(i, i + batchSize);
       const checks = batch.map(async (item) => {
         try {
@@ -335,14 +338,16 @@ async function scan(targetUrl) {
           if (ok && hasContent && !isSoft404) {
             results.found.push({ path: item.path, name: item.name, severity: item.severity, status: r.status, cat: item.cat });
             results.tests.push({ id: `info-${item.path}`, name: `${item.name} accessible`, status: 'fail', severity: item.severity });
-          } else {
-            results.tests.push({ id: `info-${item.path}`, name: `${item.name} not found`, status: 'pass', severity: 'info' });
           }
-        } catch { /* request failed — not counted as pass or fail */ }
+          // Don't report 'not found' — it's noise
+        } catch { /* request failed — skip silently */ }
       });
       await Promise.all(checks);
     }
   } catch (err) { results.error = err.message; }
+  // Add coverage summary
+  const foundCount = results.found.length;
+  results.tests.push({ id: 'info-summary', name: `Info leak scan: ${foundCount} exposed out of 250+ paths checked`, status: foundCount > 0 ? 'fail' : 'pass', severity: foundCount > 0 ? 'high' : 'info' });
   return { scanner: 'Information Leakage', icon: '📂', results, testCount: results.tests.length };
 }
 

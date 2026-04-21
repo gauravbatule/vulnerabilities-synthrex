@@ -67,14 +67,16 @@ async function scan(targetUrl) {
           results.tests.push({ id: `dir-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `Found: ${c.path} (${c.status})`, status: 'fail', severity });
         } else if (c.status === 403) {
           results.tests.push({ id: `dir-403-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `Forbidden: ${c.path} (403)`, status: 'warn', severity: 'info' });
-        } else {
-          results.tests.push({ id: `dir-${c.path.replace(/[^a-z0-9]/gi, '')}`, name: `Not found: ${c.path}`, status: 'pass', severity: 'info' });
         }
+        // Don't report 'not found' — it's noise
       }
     }
   } catch (err) {
     results.error = err.message;
   }
+  // Add summary
+  const foundCount = results.found.length;
+  results.tests.push({ id: 'dir-summary', name: `Directory scan: ${foundCount} found out of ${PATHS.length} paths checked`, status: foundCount > 0 ? 'warn' : 'pass', severity: foundCount > 0 ? 'medium' : 'info' });
   return { scanner: 'Directory Discovery', icon: '📁', results, testCount: results.tests.length };
 }
 

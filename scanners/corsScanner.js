@@ -11,13 +11,17 @@ const TEST_ORIGINS = [
   'https://target.com.evil.com',
 ];
 
+const SCANNER_TIMEOUT = 45000;
+
 async function scan(targetUrl) {
   const results = { findings: [], tests: [] };
+  const deadline = Date.now() + SCANNER_TIMEOUT;
   try {
     const url = new URL(targetUrl);
 
     // Test each origin
     for (const origin of TEST_ORIGINS) {
+      if (Date.now() > deadline) break;
       try {
         const response = await axios.get(targetUrl, {
           timeout: 10000, validateStatus: () => true,
@@ -47,6 +51,7 @@ async function scan(targetUrl) {
     // Test HTTP methods
     const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE', 'CONNECT'];
     for (const method of methods) {
+      if (Date.now() > deadline) break;
       try {
         const response = await axios({ method: method === 'CONNECT' ? 'GET' : method, url: targetUrl, timeout: 5000, validateStatus: () => true, headers: { 'Origin': 'https://evil.com' } });
         const acam = response.headers['access-control-allow-methods'];
