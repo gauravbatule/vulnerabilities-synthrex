@@ -75,14 +75,16 @@ async function scan(targetUrl) {
         if (r.isOpen) {
           results.open.push({ port: r.port, service: r.service, severity: r.severity });
           results.tests.push({ id: `port-open-${r.port}`, name: `Port ${r.port} (${r.service}) open`, status: ['critical','high'].includes(r.severity) ? 'fail' : 'warn', severity: r.severity });
-        } else {
-          results.tests.push({ id: `port-closed-${r.port}`, name: `Port ${r.port} (${r.service}) closed`, status: 'pass', severity: 'info' });
         }
+        // Don't report closed ports — they're expected
       }
     }
   } catch (err) {
     results.error = `Port scan failed: ${err.message}`;
   }
+  // Summary
+  const openCount = results.open.length;
+  results.tests.push({ id: 'port-summary', name: `Port scan: ${openCount} open out of ${COMMON_PORTS.length} checked`, status: openCount > 3 ? 'warn' : 'pass', severity: openCount > 3 ? 'medium' : 'info' });
   return { scanner: 'Port Scanner', icon: '🔌', results, testCount: results.tests.length };
 }
 
