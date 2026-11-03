@@ -66,6 +66,22 @@ app.use((req, res, next) => {
   next();
 });
 
+// Normalize API routes on serverless deployments
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && (
+    req.url.startsWith('/scanners') ||
+    req.url.startsWith('/precheck') ||
+    req.url.startsWith('/run-scanner') ||
+    req.url.startsWith('/scan') ||
+    req.url.startsWith('/verify-code') ||
+    req.url.startsWith('/ai-analyze') ||
+    req.url.startsWith('/export-pdf')
+  )) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // In-memory scan storage with TTL eviction
