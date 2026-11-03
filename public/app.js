@@ -349,6 +349,7 @@ async function runAi(){
     const d=await r.json();
     const md=d.success?d.analysis:(d.fallbackAnalysis||d.error||'Analysis not available');
     aiMd.innerHTML=renderMd(md);
+    if(d.model){const b=document.querySelector('.ai-badge');if(b)b.textContent=d.model.split('/').pop();}
     if(d.success&&d.analysis)lastScan.aiAnalysis={analysis:d.analysis};
   }catch(e){
     aiMd.innerHTML='<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center;">AI analysis unavailable. You can still view all scanner results above.</div>';
