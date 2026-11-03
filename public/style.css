@@ -102,30 +102,6 @@ body {
 .stat-err .stat-val { color: var(--red); }
 .stat-wrn .stat-val { color: var(--amber); }
 
-/* Buy Me a Coffee */
-.bmc-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 10px 18px;
-  min-height: 44px;
-  background: #FFDD00;
-  color: #000;
-  font-family: var(--font);
-  font-size: 13px;
-  font-weight: 700;
-  text-decoration: none;
-  border-radius: 8px;
-  transition: all 0.25s ease;
-  flex-shrink: 0;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-.bmc-btn:hover {
-  background: #ffe84d;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(255, 221, 0, 0.3);
-}
-.bmc-btn:active { transform: scale(0.97); }
 
 /* ══════════════════════════
    CONTAINER
@@ -681,7 +657,6 @@ footer strong { color: var(--text2); font-weight: 600; }
 @media (max-width: 600px) {
   .nav-inner { flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
   .nav-inner .brand { order: 1; }
-  .nav-inner .bmc-btn { order: 2; margin-left: auto; }
   .nav-inner .nav-stats { order: 3; width: 100%; justify-content: center; }
   .container { padding: 0 16px; }
   .hero { padding: 40px 0 24px; }
@@ -695,8 +670,6 @@ footer strong { color: var(--text2); font-weight: 600; }
   .sev-count { font-size: 18px; }
   .report { padding: 20px 16px; font-size: 13px; }
   .footer-inner { flex-direction: column; gap: 8px; text-align: center; }
-  .bmc-btn { padding: 10px 14px; font-size: 12px; min-height: 44px; border-radius: 8px; }
-  .bmc-btn img { height: 18px !important; width: 18px !important; margin-right: 5px !important; }
 }
 
 /* ══════════════════════════

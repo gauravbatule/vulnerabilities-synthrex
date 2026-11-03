@@ -2,7 +2,7 @@
 
 **Comprehensive website security scanning with 18 specialized modules and AI-powered analysis.**
 
-Built by [Gaurav Batule](https://www.linkedin.com/in/gaurav-batule/) · Live at [synthrex.in](https://synthrex.in)
+Live at [synthrex.in](https://synthrex.in)
 
 ---
 
@@ -118,4 +118,4 @@ All responsibility for scanning lies with the user. See [Terms & Privacy](https:
 
 ## License
 
-MIT © [Gaurav Batule](https://www.linkedin.com/in/gaurav-batule/)
+MIT

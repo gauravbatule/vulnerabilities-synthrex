@@ -754,7 +754,7 @@ app.post('/api/export-pdf', (req, res) => {
   doc.moveTo(M, doc.y).lineTo(M + PW, doc.y).strokeColor('#e0e0e0').lineWidth(0.5).stroke();
   doc.y += 8;
   doc.fontSize(8).font('Helvetica').fillColor(gray)
-    .text('Synthrex Security Report  |  Built by Gaurav Batule  |  synthrex.in', M, doc.y, { width: PW, align: 'center' });
+    .text('Synthrex Security Report  |  synthrex.in', M, doc.y, { width: PW, align: 'center' });
 
   // Page numbers
   const pages = doc.bufferedPageRange();
@@ -798,7 +798,7 @@ if (!process.env.VERCEL) {
 ║                                                          ║
 ║   ${SCANNERS.length} Scanner Modules | 1800+ Security Tests              ║
 ║   AI-Powered Analysis via Groq API                       ║
-║   Built by Gaurav Batule                                 ║
+║                                                          ║
 ║                                                          ║
 ╚══════════════════════════════════════════════════════════╝
     `);
